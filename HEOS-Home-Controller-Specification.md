@@ -15,12 +15,12 @@ This is a local-only controller for the HEOS devices at home. It replaces the un
 
 | Phase | Client | Viewport | Notes |
 | --- | --- | --- | --- |
-| 1 | Samsung Android tablet | 1920 x 1200, landscape | Primary, wall or couch use |
-| 2 | Android smartphone | ~412 x 915 dp, portrait | Same web app, responsive layout |
-| optional | Raspberry Pi 4 touchscreen | 800 x 480 | Kiosk mode, Chromium |
+| 1 | Samsung Android tablet | 1920 x 1200 (1280 x 800 dp) | Primary, wall or couch use; landscape and portrait |
+| 2 | Android smartphone | ~412 x 915 dp, portrait | Same web app, phone layout; portrait only (locked in the installed PWA) |
 
 **Out of scope for v1**
 
+- A Raspberry Pi 4 touchscreen client (dropped: a second tablet serves that purpose)
 - Initial Wi-Fi onboarding and firmware installation: done on the amp's front panel (see F8.5)
 - Multi-room grouping UI (the API supports it; it can come later)
 - Not planned: LAN-only by design (no access from outside the home network)
@@ -51,7 +51,6 @@ flowchart TB
   subgraph Clients
     T["Samsung Tab · PWA<br/>primary, 1920 x 1200"]
     P["Android phone · PWA<br/>phase 2"]
-    K["Pi 4 touchscreen<br/>optional kiosk"]
   end
   subgraph S["heos-home service · Raspberry Pi 4 · Python asyncio"]
     API["API layer<br/>FastAPI: REST /api/v1, WebSocket /ws,<br/>serves the PWA; SSDP discovery"]
@@ -66,7 +65,6 @@ flowchart TB
   end
   T -->|REST + WebSocket| API
   P -->|REST + WebSocket| API
-  K -->|REST + WebSocket| API
   CLI -->|TCP 1255, JSON| AMP["Marantz PM7000N<br/>HEOS CLI :1255<br/>+ UPnP ACT power :60006"]
   DLNA["DLNA servers<br/>NAS / PC media<br/>UPnP AV"] -->|UPnP| AMP
   AM["Amazon Music<br/>cloud service<br/>login kept in HEOS account"] -->|amp streams directly from Amazon| AMP
@@ -331,7 +329,7 @@ The primary layout is tablet landscape (1920 x 1200 px, about 1280 x 800 dp at t
 Power is always per device: there is no app-wide power button, since each HEOS device has its own power state.
 7. **Settings:** HEOS account sign-in, theme, default device, backup/restore of config and playlists, about/version.
 
-**Phone layout (phase 2):** single pane with bottom navigation (Playing · Queue · Source · Playlists · Inputs), and a mini-player bar above it that expands to full now-playing.
+**Phone layout:** a device whose shortest screen side is under 600 dp is a phone (tablets keep the rail in both orientations). Phones are portrait only: the installed PWA locks the orientation, a browser tab turned sideways shows "turn your phone upright". Layout: top bar with the device switcher (per-device power) and Devices / Settings buttons, the current screen, a mini-player bar (cover, title, play/pause, next; tap opens Playing; hidden on Playing) and bottom navigation (Playing · Queue · Source · Playlists · Inputs).
 
 **Interaction rules**
 

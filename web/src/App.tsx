@@ -2,7 +2,9 @@ import { Box, CssBaseline, useMediaQuery } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { useEffect, useMemo, useState } from "react";
 import { NavRail, type View } from "./components/NavRail";
+import { PhoneShell } from "./components/PhoneShell";
 import { StatusBanner } from "./components/StatusBanner";
+import { useDeviceClass, usePortraitLock } from "./hooks/useDeviceClass";
 import { useWakeLock } from "./hooks/useWakeLock";
 import { NotifyProvider, useNotify } from "./notify";
 import { usePrefs } from "./state/prefs";
@@ -45,9 +47,23 @@ function PlaybackErrors() {
 }
 
 function Shell() {
-  // Navigation rail + one view. Playing and Queue are separate views, so each
-  // screen is a single column that also works on a phone.
+  // Tablet (shortest side >= 600 dp, either orientation): navigation rail + one view.
+  // Phone: portrait only, top bar + view + mini-player + bottom navigation.
   const [view, setView] = useState<View>("now");
+  const { phone, landscape } = useDeviceClass();
+  usePortraitLock(phone);
+
+  if (phone) {
+    return (
+      <Box sx={{ height: "100dvh", display: "flex", flexDirection: "column" }}>
+        <StatusBanner />
+        <PlaybackErrors />
+        <PhoneShell view={view} onView={setView} landscape={landscape}>
+          <MainView view={view} />
+        </PhoneShell>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ height: "100dvh", display: "flex", flexDirection: "column" }}>

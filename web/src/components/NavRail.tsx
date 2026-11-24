@@ -5,15 +5,14 @@ import PlayCircleIcon from "@mui/icons-material/PlayCircle";
 import QueueMusicIcon from "@mui/icons-material/QueueMusic";
 import SettingsIcon from "@mui/icons-material/Settings";
 import SpeakerIcon from "@mui/icons-material/Speaker";
-import { Box, ButtonBase, ListItemText, Menu, MenuItem, Stack, Typography } from "@mui/material";
+import { Box, ButtonBase, Stack, Typography } from "@mui/material";
 import { useState } from "react";
-import { selectPid, useSelectedDevice } from "../hooks/useSelectedPlayer";
-import { useAppState } from "../state/store";
-import { PowerButton } from "./PowerButton";
+import { useSelectedDevice } from "../hooks/useSelectedPlayer";
+import { DeviceMenu } from "./DeviceMenu";
 
 export type View = "now" | "queue" | "source" | "playlists" | "inputs" | "devices" | "settings";
 
-const ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
+export const NAV_ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: "now", label: "Playing", icon: <PlayCircleIcon /> },
   { view: "queue", label: "Queue", icon: <FormatListNumberedIcon /> },
   { view: "source", label: "Source", icon: <LibraryMusicIcon /> },
@@ -38,7 +37,6 @@ function RailItem({ active, label, icon, onClick }: { active: boolean; label: st
 
 export function NavRail({ view, onView }: { view: View; onView: (v: View) => void }) {
   const device = useSelectedDevice();
-  const devices = useAppState((s) => s.devices);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
 
   return (
@@ -54,28 +52,9 @@ export function NavRail({ view, onView }: { view: View; onView: (v: View) => voi
           {device?.name ?? "No device"}
         </Typography>
       </ButtonBase>
-      <Menu anchorEl={anchor} open={anchor !== null} onClose={() => setAnchor(null)}>
-        {devices.length === 0 && <MenuItem disabled>No devices found</MenuItem>}
-        {devices.map((d) => (
-          <MenuItem
-            key={d.pid}
-            selected={d.pid === device?.pid}
-            onClick={() => {
-              selectPid(d.pid);
-              setAnchor(null);
-            }}
-            sx={{ gap: 2, minWidth: 260 }}
-          >
-            <ListItemText
-              primary={d.name}
-              secondary={!d.online ? "Offline" : d.power.state === "on" ? "On" : d.power.state === "standby" ? "Standby" : d.model}
-            />
-            <PowerButton device={d} size="small" />
-          </MenuItem>
-        ))}
-      </Menu>
+      <DeviceMenu anchor={anchor} onClose={() => setAnchor(null)} />
       <Box sx={{ height: 8 }} />
-      {ITEMS.map((i) => (
+      {NAV_ITEMS.map((i) => (
         <RailItem key={i.view} active={view === i.view} label={i.label} icon={i.icon} onClick={() => onView(i.view)} />
       ))}
     </Stack>
