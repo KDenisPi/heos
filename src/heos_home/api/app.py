@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from .. import __version__
 from ..heos.client import HeosClient
 from ..heos.protocol import HeosCommandError, HeosConnectionError, HeosTimeoutError
+from ..services.account import AccountService, SecretStore, SignInFailed
 from ..services.devices import DeviceService
 from ..services.events import EventBus
 from ..services.images import ImageCache, ImageError
@@ -39,6 +40,7 @@ class Services:
     power: PowerManager
     library: LibraryService
     playlists: PlaylistService
+    account: AccountService
 
 
 def build_services(settings: Settings, client: HeosClient | None = None) -> Services:
@@ -52,7 +54,10 @@ def build_services(settings: Settings, client: HeosClient | None = None) -> Serv
     devices.power = power
     library = LibraryService(client, storage, images)
     playlists = PlaylistService(storage, players, library, bus)
-    return Services(settings, storage, bus, client, players, devices, images, power, library, playlists)
+    # The key is kept apart from secrets.json; the data-dir fallback is used only if /etc is not writable.
+    secrets = SecretStore(storage.data_dir / "secrets.json", settings.key_file, storage.data_dir / "heos-home.key")
+    account = AccountService(client, players, secrets, bus)
+    return Services(settings, storage, bus, client, players, devices, images, power, library, playlists, account)
 
 
 def create_app(settings: Settings | None = None, services: Services | None = None) -> FastAPI:
@@ -127,6 +132,10 @@ def _install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(PowerNotSupported)
     async def _no_power(_: Request, exc: PowerNotSupported) -> JSONResponse:
         return _error(501, "power_not_supported", str(exc))
+
+    @app.exception_handler(SignInFailed)
+    async def _sign_in_failed(_: Request, exc: SignInFailed) -> JSONResponse:
+        return _error(401, "sign_in_failed", str(exc), eid=exc.eid)
 
     @app.exception_handler(PlaylistExists)
     async def _playlist_exists(_: Request, exc: PlaylistExists) -> JSONResponse:

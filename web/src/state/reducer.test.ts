@@ -93,3 +93,11 @@ describe("favorites", () => {
     expect(reduce(snap, { type: "favorites_changed" }).favoritesVersion).toBe(1);
   });
 });
+
+describe("account", () => {
+  it("merges partial account events", () => {
+    let s = reduce(snap, { type: "account", data: { signed_in: true, username: "u", remembered: true, auto_sign_in: true, error: null } });
+    s = reduce(s, { type: "account", data: { signed_in: false, username: null } });
+    expect(s.account).toMatchObject({ signed_in: false, remembered: true, auto_sign_in: true });
+  });
+});

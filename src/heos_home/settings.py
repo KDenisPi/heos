@@ -12,6 +12,7 @@
 | HEOS_HOME_LOG_LEVEL      | INFO                 | DEBUG also logs raw CLI traffic               |
 | HEOS_HOME_LOG_JSON       | on                   | Structured JSON logs (off = plain text)       |
 | HEOS_HOME_HEOS_PORT      | 1255                 | HEOS CLI port (change only for the fake)      |
+| HEOS_HOME_KEY_FILE       | /etc/heos-home/key   | Key for saved HEOS credentials (mode 600)     |
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ class Settings:
     log_level: str = "INFO"
     log_json: bool = True
     heos_port: int = 1255
+    key_file: Path = Path("/etc/heos-home/key")
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "Settings":
@@ -60,4 +62,5 @@ class Settings:
             log_level=(env.get("HEOS_HOME_LOG_LEVEL") or "INFO").upper(),
             log_json=_flag(env.get("HEOS_HOME_LOG_JSON"), True),
             heos_port=int(env.get("HEOS_HOME_HEOS_PORT") or 1255),
+            key_file=Path(env.get("HEOS_HOME_KEY_FILE") or "/etc/heos-home/key"),
         )

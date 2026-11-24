@@ -176,6 +176,12 @@ export interface InputItem {
 export interface Account {
   signed_in: boolean;
   username: string | null;
+  /** Credentials saved encrypted on the server for automatic re-sign-in (F7.3). */
+  remembered?: boolean;
+  remembered_username?: string | null;
+  auto_sign_in?: boolean;
+  /** Last automatic sign-in error, e.g. the saved password was rejected. */
+  error?: string | null;
 }
 
 export interface Health {

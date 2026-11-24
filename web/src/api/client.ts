@@ -82,6 +82,10 @@ const json = { get: <T>(p: string) => request<T>("GET", p) };
 export const api = {
   health: () => json.get<Health>("/health"),
   account: () => json.get<Account>("/account"),
+  signIn: (username: string, password: string, remember: boolean) =>
+    request<Account>("POST", "/account/sign-in", { username, password, remember }),
+  signOut: () => request<Account>("POST", "/account/sign-out"),
+  forgetCredentials: () => request<Account>("DELETE", "/account/credentials"),
 
   devices: () => json.get<{ devices: Device[]; last_discovery: number | null }>("/devices"),
   discover: () => request<{ found: string[]; devices: Device[] }>("POST", "/devices/discover"),

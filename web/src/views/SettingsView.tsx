@@ -15,12 +15,11 @@ import { api, getToken, setToken } from "../api/client";
 import type { Health } from "../api/types";
 import { useNotify } from "../notify";
 import { type ThemeMode, setPrefs, usePrefs } from "../state/prefs";
-import { useAppState } from "../state/store";
+import { AccountCard } from "../components/AccountCard";
 
 export function SettingsView() {
   const prefs = usePrefs();
   const notify = useNotify();
-  const account = useAppState((s) => s.account);
   const [token, setTokenInput] = useState(getToken());
   const [health, setHealth] = useState<Health | null>(null);
 
@@ -32,14 +31,7 @@ export function SettingsView() {
     <Stack spacing={2} sx={{ p: 3, maxWidth: 720 }}>
       <Typography variant="h5">Settings</Typography>
 
-      <Card variant="outlined">
-        <CardContent>
-          <Typography variant="subtitle1" gutterBottom>HEOS account</Typography>
-          <Typography color="text.secondary">
-            {account.signed_in ? `Signed in as ${account.username}` : "Signed out"}. Sign-in from this app comes later (F7.2).
-          </Typography>
-        </CardContent>
-      </Card>
+      <AccountCard />
 
       <Card variant="outlined">
         <CardContent>

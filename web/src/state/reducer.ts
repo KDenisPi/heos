@@ -121,7 +121,8 @@ export function reduce(state: AppState, ev: ServerEvent, now = Date.now()): AppS
       return patchDevice(next, ev.pid, (d) => ({ ...d, online: false }));
     }
     case "account":
-      return { ...state, account: ev.data };
+      // Player events carry only signed_in/username; the account service adds the rest.
+      return { ...state, account: { ...state.account, ...ev.data } };
     case "devices_changed":
     case "players_changed":
       return { ...state, devicesVersion: state.devicesVersion + 1 };

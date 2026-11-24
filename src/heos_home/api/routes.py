@@ -182,11 +182,36 @@ async def health(svc: Services = Depends(services)) -> dict[str, Any]:
     }
 
 
-@router.get("/account", tags=["system"])
+class SignInBody(BaseModel):
+    username: str = Field(min_length=1, max_length=200)
+    password: str = Field(min_length=1, max_length=200)
+    remember: bool = Field(True, description="Save encrypted on the server and sign in again after an amp reboot")
+
+
+@router.get("/account", tags=["account"])
 async def account(svc: Services = Depends(services)) -> dict[str, Any]:
+    """HEOS account status (F7.1) and whether credentials are saved for automatic re-sign-in (F7.3)."""
     if svc.client.connected:
         await svc.players.refresh_account()
-    return svc.players.account
+    return svc.account.status()
+
+
+@router.post("/account/sign-in", tags=["account"], dependencies=write)
+async def sign_in(body: SignInBody, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Sign the HEOS device in to a HEOS account (F7.2). 401 with the amp's reason if it fails."""
+    return await svc.account.sign_in(body.username, body.password, body.remember)
+
+
+@router.post("/account/sign-out", tags=["account"], dependencies=write)
+async def sign_out(svc: Services = Depends(services)) -> dict[str, Any]:
+    """Sign out and forget saved credentials. Streaming services (Amazon) stop working until signed in again."""
+    return await svc.account.sign_out()
+
+
+@router.delete("/account/credentials", tags=["account"], dependencies=write)
+async def forget_credentials(svc: Services = Depends(services)) -> dict[str, Any]:
+    """Forget the saved credentials but stay signed in (no automatic re-sign-in any more)."""
+    return svc.account.forget()
 
 
 # ------------------------------------------------------------------ devices

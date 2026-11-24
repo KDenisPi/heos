@@ -29,7 +29,7 @@ async def websocket(ws: WebSocket) -> None:
                     "connection": {"connected": svc.client.connected, "host": svc.client.host},
                     "players": [p.to_dict() for p in svc.players.players.values()],
                     "devices": svc.devices.list(),
-                    "account": svc.players.account,
+                    "account": svc.account.status(),
                 },
             }
         )

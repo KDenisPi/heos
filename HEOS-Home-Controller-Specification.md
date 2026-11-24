@@ -162,8 +162,8 @@ Amazon is only available through the HEOS device's own integration; the app neve
 | ID | Requirement | Pri |
 | --- | --- | --- |
 | F7.1 | Show sign-in state (`system/check_account`) | M |
-| F7.2 | Sign in / out (`system/sign_in`, `system/sign_out`); credentials stored encrypted on the server, never in the browser | M |
-| F7.3 | Re-sign-in automatically after a device reboot | S |
+| F7.2 | Sign in / out from Settings (`system/sign_in`, `system/sign_out`). Optional "Remember": credentials stored encrypted on the server (Fernet, `secrets.json` mode 600, key in `/etc/heos-home/key` mode 600), never in the browser, never logged. Signing out in the app forgets them | M |
+| F7.3 | Re-sign-in automatically after a device reboot (on reconnect) or after a sign-out by another app (`event/user_changed`), at most once a minute; a rejected password (eid 6/10) stops the retries and is shown in Settings | S |
 
 ### F8. Device settings and information
 
@@ -277,7 +277,9 @@ REST handles commands and queries, and one WebSocket pushes state. Base path `/a
 | GET/PATCH/DELETE | `/playlists/{id}` | Read, rename, edit items, delete | F4.2, F4.4 |
 | POST | `/playlists/{id}/load` | `{"pid":…,"mode":"now\|replace\|end"}` (`append` = `end`); progress as `playlist_load` events | F4.3 |
 | GET | `/playlists/{id}/export` | Download the .m3u8 file | F4.5 |
-| GET/POST | `/account` | Status, sign in/out | F7 |
+| GET | `/account` | Status: signed in, user, password saved, auto sign-in, last error | F7.1 |
+| POST | `/account/sign-in`, `/account/sign-out` | `{username, password, remember}`; 401 with the amp's reason | F7.2 |
+| DELETE | `/account/credentials` | Forget the saved password, stay signed in | F7.3 |
 | GET | `/health` | Liveness + CLI connection state | NFR |
 
 Device settings endpoints (F8):

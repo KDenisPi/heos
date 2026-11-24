@@ -77,6 +77,14 @@ class _SystemError(Exception):
     """Answer eid 12, like the real NAS does for search."""
 
 
+class _BadCredentials(Exception):
+    """eid 6 Invalid Credentials."""
+
+
+class _UserNotFound(Exception):
+    """eid 10 User not found."""
+
+
 class _OptionError(Exception):
     """Answer eid 15 "Option not supported"."""
 
@@ -162,6 +170,7 @@ class FakeHeosServer:
         self.port = port
         self.players: dict[int, FakePlayer] = {-1234: FakePlayer(-1234, "Living room")}
         self.signed_in: str | None = "user@example.com"
+        self.accounts: dict[str, str] = {"user@example.com": "s3cret & =%"}  # username -> password
         self.received: list[str] = []
         self.under_process_for: set[str] = {"browse/browse"}
         self.fail_next: dict[str, int] = {}  # command -> eid
@@ -186,6 +195,11 @@ class FakeHeosServer:
         if self._server:
             self._server.close()
             await self._server.wait_closed()
+
+    async def reboot(self) -> None:
+        """Like an amp reboot: connections drop and the HEOS account comes back signed out."""
+        self.signed_in = None
+        await self.drop_connections()
 
     async def drop_connections(self) -> None:
         for writer in list(self._writers):
@@ -254,6 +268,12 @@ class FakeHeosServer:
         except _SystemError:
             self._reply(writer, command, "fail", "eid=12&text=System error&syserrno=-9")
             return
+        except _BadCredentials:
+            self._reply(writer, command, "fail", "eid=6&text=Invalid Credentials")
+            return
+        except _UserNotFound:
+            self._reply(writer, command, "fail", "eid=10&text=User not found")
+            return
         except _OptionError:
             self._reply(writer, command, "fail", f"eid=15&text=Option not supported&{query}")
             return
@@ -300,6 +320,10 @@ class FakeHeosServer:
         return f"signed_in&un={self.signed_in}" if self.signed_in else "signed_out"
 
     def _cmd_system__sign_in(self, p: dict[str, str], w: asyncio.StreamWriter) -> str:
+        if p["un"] not in self.accounts:
+            raise _UserNotFound
+        if self.accounts[p["un"]] != p["pw"]:
+            raise _BadCredentials
         self.signed_in = p["un"]
         self.emit("user_changed", f"signed_in&un={self.signed_in}")
         return f"signed_in&un={self.signed_in}"

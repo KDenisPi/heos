@@ -25,7 +25,8 @@ Phase 1 backend (core):
 | DLNA library: servers, folder browsing with paging and breadcrumb, play/queue tracks and folders, search where supported (filter fallback), 10 min cache, pinned folders, last folder | ✅ | F5.1–F5.5, F5.7 |
 | Amazon Music (browse, play streams, queue My Music tracks and albums) and HEOS Favorites (play, add, remove) | ✅ | F6.1–F6.5 |
 | Local playlists: save queue (name only), list, load (3 modes), edit, sort, rename, duplicate, delete, import/export .m3u8 | ✅ | F4.1–F4.5 |
-| Re-match unresolved playlist items, HEOS sign-in, phone layout | next | F4.6, F7 |
+| HEOS account: sign in / out from Settings, password saved encrypted (optional), automatic re-sign-in after an amp reboot | ✅ | F7.1–F7.3 |
+| Re-match unresolved playlist items, phone layout | next | F4.6, phase 4 |
 
 ## Tested devices
 
@@ -136,6 +137,19 @@ Errors are JSON `{"error":{"code","message",…}}`: 404 unknown id, 400 bad
 value, 503 amp not connected, 504 amp timeout, 502 HEOS `fail` (with `eid`)
 or power request failed, 501 no power driver, 429 power switched too recently.
 
+## HEOS account and saved password
+
+Settings → HEOS account signs the amp in or out (`system/sign_in`). With
+"Remember", username and password are stored encrypted (Fernet) in
+`<data dir>/secrets.json` (mode 600) with the key in a separate file,
+`/etc/heos-home/key` (`HEOS_HOME_KEY_FILE`). If that file cannot be created
+(development), the key goes to `<data dir>/heos-home.key` and a warning is
+logged; then a copy of the data folder contains both, so keep backups private.
+After an amp reboot, or a sign-out by another app, the service signs in again;
+a rejected password stops the retries until you sign in by hand. Signing out
+in this app forgets the saved password. Amazon logins are never handled here:
+they live in the HEOS account.
+
 ## Deployment (Pi 4, venv + systemd)
 
 ```bash
@@ -144,6 +158,10 @@ sudo mkdir -p /opt/heos-home /etc/heos-home
 sudo cp -r . /opt/heos-home && cd /opt/heos-home
 sudo python3 -m venv .venv && sudo .venv/bin/pip install .
 sudo install -m 600 deploy/env.example /etc/heos-home/env    # edit it
+# Key for the saved HEOS password (F7.2). /etc is read-only for the service
+# (ProtectSystem=strict), so create it here, readable only by the service user:
+sudo sh -c 'umask 077; /opt/heos-home/.venv/bin/python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > /etc/heos-home/key'
+sudo chown heos-home:heos-home /etc/heos-home/key
 sudo cp deploy/heos-home.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now heos-home
 ```

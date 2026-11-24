@@ -135,7 +135,8 @@ async def test_sources_and_account(app_env):
     _, _, http = app_env
     sources = (await http.get("/sources")).json()["sources"]
     assert {s["name"] for s in sources} >= {"Amazon Music", "Local Music", "AUX Input"}
-    assert (await http.get("/account")).json() == {"signed_in": True, "username": "user@example.com"}
+    acc = (await http.get("/account")).json()
+    assert (acc["signed_in"], acc["username"], acc["remembered"]) == (True, "user@example.com", False)
 
 
 async def test_offline_returns_503(app_env, fake):

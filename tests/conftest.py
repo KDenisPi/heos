@@ -88,7 +88,7 @@ async def client(fake: FakeHeosServer) -> AsyncIterator[HeosClient]:
 
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
-    return Settings(data_dir=tmp_path / "data", discovery=False, hosts=["127.0.0.1"])
+    return Settings(data_dir=tmp_path / "data", discovery=False, hosts=["127.0.0.1"], key_file=tmp_path / "etc" / "key")
 
 
 @pytest.fixture
