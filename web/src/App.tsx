@@ -17,14 +17,29 @@ import { LibraryView } from "./views/LibraryView";
 import { PlaceholderView } from "./views/PlaceholderView";
 import { SettingsView } from "./views/SettingsView";
 
-/** Now playing above the queue: the tablet's right panel, or a full view on narrow screens. */
-function PlayerPanel() {
+/**
+ * The Playing screen: now playing and the queue side by side on wide screens
+ * (tablet landscape), stacked on narrow ones (phone).
+ */
+function PlayingView({ wide }: { wide: boolean }) {
   const player = useSelectedPlayer();
   if (!player) {
     return (
       <Typography color="text.secondary" sx={{ p: 3 }}>
         No player yet. Check the Devices screen.
       </Typography>
+    );
+  }
+  if (wide) {
+    return (
+      <Box sx={{ height: "100%", minHeight: 0, display: "grid", gridTemplateColumns: "minmax(360px, 480px) minmax(0, 1fr)" }}>
+        <Box sx={{ overflowY: "auto", borderRight: 1, borderColor: "divider", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          <NowPlaying player={player} />
+        </Box>
+        <Stack sx={{ minHeight: 0 }}>
+          <QueuePanel pid={player.pid} />
+        </Stack>
+      </Box>
     );
   }
   return (
@@ -36,10 +51,10 @@ function PlayerPanel() {
   );
 }
 
-function MainView({ view }: { view: View }) {
+function MainView({ view, wide }: { view: View; wide: boolean }) {
   switch (view) {
     case "now":
-      return <PlayerPanel />;
+      return <PlayingView wide={wide} />;
     case "inputs":
       return <InputsView />;
     case "devices":
@@ -63,25 +78,20 @@ function PlaybackErrors() {
 }
 
 function Shell() {
-  // Tablet landscape (≈1280 dp) gets three panes; narrower screens fold the player into a view.
-  const wide = useMediaQuery("(min-width: 1000px)");
-  const [view, setView] = useState<View>("library");
-  const shown: View = wide && view === "now" ? "library" : view;
+  // Navigation rail + one view. Playing is a view of its own, so other screens
+  // get the full width, and the same layout works on a phone.
+  const wide = useMediaQuery("(min-width: 900px)");
+  const [view, setView] = useState<View>("now");
 
   return (
     <Box sx={{ height: "100dvh", display: "flex", flexDirection: "column" }}>
       <StatusBanner />
       <PlaybackErrors />
-      <Box sx={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: wide ? "80px minmax(0,1fr) 420px" : "80px minmax(0,1fr)" }}>
-        <NavRail view={shown} onView={setView} narrow={!wide} />
-        <Box component="main" sx={{ minWidth: 0, minHeight: 0, overflowY: shown === "now" ? "hidden" : "auto", height: "100%" }}>
-          <MainView view={shown} />
+      <Box sx={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "80px minmax(0,1fr)" }}>
+        <NavRail view={view} onView={setView} />
+        <Box component="main" sx={{ minWidth: 0, minHeight: 0, overflowY: view === "now" ? "hidden" : "auto", height: "100%" }}>
+          <MainView view={view} wide={wide} />
         </Box>
-        {wide && (
-          <Box component="aside" sx={{ borderLeft: 1, borderColor: "divider", bgcolor: "background.paper", minHeight: 0 }}>
-            <PlayerPanel />
-          </Box>
-        )}
       </Box>
     </Box>
   );

@@ -12,8 +12,8 @@ import { PowerButton } from "./PowerButton";
 
 export type View = "now" | "library" | "playlists" | "inputs" | "devices" | "settings";
 
-const ITEMS: { view: View; label: string; icon: React.ReactNode; narrowOnly?: boolean }[] = [
-  { view: "now", label: "Playing", icon: <PlayCircleIcon />, narrowOnly: true },
+const ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
+  { view: "now", label: "Playing", icon: <PlayCircleIcon /> },
   { view: "library", label: "Library", icon: <LibraryMusicIcon /> },
   { view: "playlists", label: "Playlists", icon: <QueueMusicIcon /> },
   { view: "inputs", label: "Inputs", icon: <InputIcon /> },
@@ -34,7 +34,7 @@ function RailItem({ active, label, icon, onClick }: { active: boolean; label: st
   );
 }
 
-export function NavRail({ view, onView, narrow }: { view: View; onView: (v: View) => void; narrow: boolean }) {
+export function NavRail({ view, onView }: { view: View; onView: (v: View) => void }) {
   const device = useSelectedDevice();
   const devices = useAppState((s) => s.devices);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -73,7 +73,7 @@ export function NavRail({ view, onView, narrow }: { view: View; onView: (v: View
         ))}
       </Menu>
       <Box sx={{ height: 8 }} />
-      {ITEMS.filter((i) => narrow || !i.narrowOnly).map((i) => (
+      {ITEMS.map((i) => (
         <RailItem key={i.view} active={view === i.view} label={i.label} icon={i.icon} onClick={() => onView(i.view)} />
       ))}
     </Stack>

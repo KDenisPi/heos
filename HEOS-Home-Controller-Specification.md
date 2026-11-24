@@ -296,19 +296,18 @@ The events map one-to-one to HEOS change events (`event/player_state_changed`, `
 
 ## 7. UI / UX
 
-The primary layout is tablet landscape (1920 x 1200 px, about 1280 x 800 dp at the Tab's density). It is a three-pane layout that is always visible, so you rarely navigate away from playback. Style: Material 3 (Android-native look), dark theme default, light optional, large touch targets (min 48 dp).
+The primary layout is tablet landscape (1920 x 1200 px, about 1280 x 800 dp at the Tab's density). It is a navigation rail plus one view at a time. Playback is a view of its own ("Playing"), not a permanent panel, so every other screen gets the full width and the same structure works on a phone. Style: Material 3 (Android-native look), dark theme default, light optional, large touch targets (min 48 dp).
 
 **Tablet layout (landscape)**
 
 | Pane | Width | Content |
 | --- | --- | --- |
-| Left rail | 80 dp | Device switcher (each device listed with its own power button and state), nav icons: Library, Playlists, Inputs, Devices, Settings |
-| Main | flexible | Current view: browse (DLNA / Amazon / Favorites), playlist editor, inputs grid, settings |
-| Right panel | 420 dp | Now playing (cover, title, transport, progress, volume) above the current queue |
+| Left rail | 80 dp | Device switcher (each device listed with its own power button and state), nav icons: Playing, Library, Playlists, Inputs, Devices, Settings |
+| Main | flexible | Current view. Playing: now playing (cover, title, transport, progress, volume) beside the queue on wide screens, above it on narrow ones. Others: browse (DLNA / Amazon / Favorites), playlist editor, inputs grid, devices, settings |
 
 **Screens**
 
-1. **Now playing + queue** (right panel, always visible): large cover art, transport, a seek bar that only displays progress (HEOS has no seek command), volume slider + mute, shuffle/repeat. The queue below supports drag to reorder, swipe to remove, a sort menu and "Save as playlist".
+1. **Playing** (nav item, start screen; now playing beside the queue): large cover art, transport, a seek bar that only displays progress (HEOS has no seek command), volume slider + mute, shuffle/repeat. The queue below supports drag to reorder, swipe to remove, a sort menu and "Save as playlist".
 2. **Library / Browse:** source tiles (each DLNA server, Amazon Music, HEOS Favorites), then a grid or list of containers with a breadcrumb. Long-press or a ⋮ menu on any item: Play now, Play next, Add to queue, Replace queue, Add to playlist…
 3. **Search:** one box per source, results grouped by type (artist / album / track).
 4. **Playlists:** list of local playlists with item count and duration. Detail view supports inline editing, sort, load (replace/append), export.
