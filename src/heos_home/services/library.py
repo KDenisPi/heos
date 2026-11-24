@@ -22,6 +22,9 @@ Amazon Music (sid 13) and HEOS Favorites (sid 1028), measured the same way:
 * the root's upsell banner fails with "User account error" and is hidden;
 * Amazon pages take 0.7-2.2 s, so the cache matters;
 * Favorites are stations too and play with ``browse/play_preset`` (1-based).
+  ``browse/set_service_option`` option 19 adds a station (sid + mid + name, or
+  the station playing on a pid) to HEOS Favorites, option 20 removes one (mid).
+  Favorites live in the HEOS account, so the official app sees them too.
 * Amazon "My Music" albums are real containers holding ``song`` items,
   without option 21, yet ``add_to_queue`` with the album's cid queues all its
   tracks (13 of 13 on the PM7000N). So a container is always tried whole
@@ -116,6 +119,8 @@ class LibraryService:
             out["play"] = "stream"
         else:
             out["play"] = "queue"
+        # Stations, Amazon albums and playlists can be HEOS Favorites (option 19).
+        out["can_favorite"] = out["play"] in ("stream", "favorite") and bool(out["mid"])
         return self.images.localize(out)
 
     async def _browse_raw(self, params: dict[str, Any]) -> HeosMessage:
@@ -218,6 +223,36 @@ class LibraryService:
         if not tracks:
             raise ValueError("nothing in this folder can be added to the queue; open it and pick an item")
         return tracks[:limit]
+
+    # ------------------------------------------------------- HEOS Favorites
+    def _forget_favorites(self) -> None:
+        for key in [k for k in self._cache if k[:2] == ("browse", FAVORITES_SID)]:
+            del self._cache[key]
+
+    async def favorite_mids(self) -> list[str]:
+        """Media ids of the current HEOS Favorites (cached like any browse page)."""
+        page = await self.browse(FAVORITES_SID, None, 0, MAX_PAGE)
+        return [str(i["mid"]) for i in page["items"] if i.get("mid")]
+
+    async def add_favorite(self, sid: int, mid: str, name: str) -> None:
+        """Add a station / Amazon album / playlist to HEOS Favorites (option 19)."""
+        if not mid or not name:
+            raise ValueError("a favorite needs a media id and a name")
+        await self.client.command("browse/set_service_option",
+                                  {"sid": sid, "option": 19, "mid": mid, "name": name}, timeout=BROWSE_TIMEOUT)
+        self._forget_favorites()
+
+    async def add_now_playing_favorite(self, pid: int) -> None:
+        """Add the station playing on ``pid`` to HEOS Favorites (option 19 with pid)."""
+        await self.client.command("browse/set_service_option", {"option": 19, "pid": pid}, timeout=BROWSE_TIMEOUT)
+        self._forget_favorites()
+
+    async def remove_favorite(self, mid: str) -> None:
+        """Remove a station from HEOS Favorites (option 20)."""
+        if mid not in await self.favorite_mids():
+            raise KeyError(mid)
+        await self.client.command("browse/set_service_option", {"option": 20, "mid": mid}, timeout=BROWSE_TIMEOUT)
+        self._forget_favorites()
 
     async def favorite_preset(self, mid: str) -> int:
         """Current 1-based position of a favorite, read fresh, for play_preset."""

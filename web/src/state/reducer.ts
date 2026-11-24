@@ -15,6 +15,8 @@ export interface AppState {
   queueVersion: Record<number, number>;
   /** Progress of a running queue sort, per pid. */
   queueSort: Record<number, QueueSortProgress>;
+  /** Bumped when HEOS Favorites change (added or removed from this app). */
+  favoritesVersion: number;
   /** Bumped when local playlists change (saved, renamed, edited, deleted). */
   playlistsVersion: number;
   /** Progress of loading a playlist into the queue, per pid. */
@@ -34,6 +36,7 @@ export const initialState: AppState = {
   account: { signed_in: false, username: null },
   queueVersion: {},
   queueSort: {},
+  favoritesVersion: 0,
   playlistsVersion: 0,
   playlistLoad: {},
   devicesVersion: 0,
@@ -99,6 +102,8 @@ export function reduce(state: AppState, ev: ServerEvent, now = Date.now()): AppS
       return { ...patchPlayer(state, ev.pid, { last_error: ev.data.error }), lastPlaybackError: { pid: ev.pid, error: ev.data.error, at: now } };
     case "queue_changed":
       return { ...state, queueVersion: { ...state.queueVersion, [ev.pid]: (state.queueVersion[ev.pid] ?? 0) + 1 } };
+    case "favorites_changed":
+      return { ...state, favoritesVersion: state.favoritesVersion + 1 };
     case "playlists_changed":
       return { ...state, playlistsVersion: state.playlistsVersion + 1 };
     case "playlist_load":

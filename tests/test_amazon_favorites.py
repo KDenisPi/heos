@@ -134,3 +134,65 @@ async def test_playable_dlna_folder_is_still_one_command(app_env, fake):
     before = sum("add_to_queue" in c for c in fake.received)
     await http.post(f"/players/{PID}/queue", json={"items": [{"sid": 111, "cid": "64$9$1$1"}], "mode": "replace"})
     assert sum("add_to_queue" in c for c in fake.received) - before == 1
+
+
+# ------------------------------------------------------------ add / remove
+import pytest  # noqa: E402
+
+from heos_home.heos import fake as fake_mod  # noqa: E402
+
+
+@pytest.fixture
+def restore_favorites():
+    saved = [dict(f) for f in fake_mod.FAVORITES]
+    yield
+    fake_mod.FAVORITES[:] = saved
+
+
+async def test_stations_can_be_favorites(app_env):
+    _, _, http = app_env
+    page = (await http.get(f"/sources/{AMAZON}/browse", params={"cid": "library/albums/#library_albums-NAME-Albums"})).json()
+    assert all(i["can_favorite"] for i in page["items"])  # Amazon albums are stations
+    menus = (await http.get(f"/sources/{AMAZON}/browse")).json()
+    assert not any(i["can_favorite"] for i in menus["items"])  # menus are not
+
+
+async def test_add_and_remove_favorite(app_env, fake, restore_favorites):
+    _, svc, http = app_env
+    events = svc.bus.subscribe()
+    mid, name = "catalog/albums/B0HRLGGK59/#chunk", "Chopin: The Great Works"
+    assert mid not in (await http.get("/favorites")).json()["mids"]
+    r = await http.post("/favorites", json={"sid": AMAZON, "mid": mid, "name": name})
+    assert r.json() == {"added": name}
+    sent = [c for c in fake.received if "set_service_option" in c][-1]
+    assert sent == f"heos://browse/set_service_option?sid=13&option=19&mid={mid}&name={name}"
+    assert mid in (await http.get("/favorites")).json()["mids"]  # cache refreshed
+    favs = (await http.get(f"/sources/{FAVORITES}/browse")).json()["items"]
+    assert favs[-1]["name"] == name
+    r = await http.delete("/favorites", params={"mid": mid})
+    assert r.json() == {"removed": mid}
+    assert mid not in (await http.get("/favorites")).json()["mids"]
+    types = []
+    while not events.empty():
+        types.append(events.get_nowait()["type"])
+    assert types.count("favorites_changed") == 2
+
+
+async def test_favorite_the_playing_station(app_env, fake, restore_favorites):
+    _, _, http = app_env
+    await http.post(f"/players/{PID}/play-stream", json={"sid": AMAZON, "mid": "library/tracks/#chunk", "name": "Tracks"})
+    r = await http.post(f"/players/{PID}/favorite-now-playing")
+    assert r.status_code == 200
+    assert "library/tracks/#chunk" in (await http.get("/favorites")).json()["mids"]
+
+
+async def test_favorite_now_playing_without_station_fails_cleanly(app_env):
+    _, _, http = app_env
+    await http.post(f"/players/{PID}/queue", json={"items": [{"sid": 111, "cid": "64$1$4"}], "mode": "replace"})
+    r = await http.post(f"/players/{PID}/favorite-now-playing")
+    assert r.status_code == 502 and r.json()["error"]["eid"] == 15
+
+
+async def test_remove_unknown_favorite_is_404(app_env):
+    _, _, http = app_env
+    assert (await http.delete("/favorites", params={"mid": "nope"})).status_code == 404

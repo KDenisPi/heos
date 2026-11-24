@@ -162,4 +162,9 @@ export const api = {
     return data as PlaylistSummary;
   },
   exportUrl: (id: string) => `${BASE}/playlists/${encodeURIComponent(id)}/export`,
+
+  favoriteMids: () => json.get<{ mids: string[] }>("/favorites"),
+  addFavorite: (item: { sid: number; mid: string; name: string }) => request("POST", "/favorites", item),
+  favoriteNowPlaying: (pid: number) => request("POST", `/players/${pid}/favorite-now-playing`),
+  removeFavorite: (mid: string) => request("DELETE", `/favorites?${new URLSearchParams({ mid })}`),
 };

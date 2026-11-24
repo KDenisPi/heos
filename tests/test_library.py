@@ -9,7 +9,7 @@ async def test_servers(app_env):
     _, _, http = app_env
     servers = (await http.get("/library/servers")).json()["servers"]
     assert servers == [{"sid": DLNA, "name": "Fake NAS", "type": "dlna_server", "container": True, "playable": False,
-                        "cid": None, "mid": None, "artist": "", "album": "", "album_id": None, "image_url": "", "play": "queue"}]
+                        "cid": None, "mid": None, "artist": "", "album": "", "album_id": None, "image_url": "", "play": "queue", "can_favorite": False}]
 
 
 async def test_browse_root_and_folder_tree(app_env):

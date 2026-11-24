@@ -151,7 +151,7 @@ Navigation is folder-based, through the standard DLNA browse the HEOS CLI expose
 | F6.1 | Amazon Music, played by the HEOS device. The Amazon login is entered once in the official app and stored in the HEOS account (its "keychain" of service logins); the device must be signed in to that HEOS account (F7). Our app never handles Amazon credentials | M |
 | F6.2 | Browse what the CLI exposes for Amazon: Playlists, Prime Stations, Charts, Recommended, New, My Music (Playlists, Artists, Albums, Tracks, Genres, Purchased). The root's upsell entry fails with "User account error" and is hidden. Search: not available (no criteria; `browse/search` answers eid 12) | M |
 | F6.3 | Play and queue Amazon items. Catalog albums, playlists and stations are single `station` items (`…/#chunk`): they play with `browse/play_stream` and replace what is playing; they cannot be queued. "My Music" albums are containers of tracks: tracks queue like DLNA tracks, and the album's cid queues the whole album in one command. If the amp ever rejects a container, its tracks are added one by one | M |
-| F6.4 | HEOS Favorites (sid 1028): list, play with `browse/play_preset`; the position is read fresh before playing, so reordering in another app is safe | S |
+| F6.4 | HEOS Favorites (sid 1028): list, play with `browse/play_preset` (position read fresh before playing), add a station / Amazon album / playlist from Source or the playing station from Playing (`set_service_option` option 19), remove (option 20). Favorites live in the HEOS account, so the official app sees the same list; the amp sends no event when they change, so the app refreshes after its own changes and other changes appear within the cache time or on reload | S |
 | F6.5 | Generic source layer: the Source screen lists HEOS Favorites, every available `music_service` and the DLNA servers; each item carries `play` = `queue` / `stream` / `favorite`, so adding a second service is configuration, not new code | M |
 | F6.6 | Candidate lossless service for classical, not chosen yet. HEOS supports Qobuz natively and through Qobuz Connect (since 2025), plus TIDAL and Deezer | C |
 
@@ -264,6 +264,8 @@ REST handles commands and queries, and one WebSocket pushes state. Base path `/a
 | GET | `/library/sources` | Library home: Favorites, streaming services, DLNA servers | F6.5 |
 | POST | `/players/{pid}/play-stream` | `{sid, mid, name}`: play an Amazon album/playlist/station | F6.3 |
 | POST | `/players/{pid}/play-favorite` | `{mid}`: play a HEOS Favorite | F6.4 |
+| GET/POST/DELETE | `/favorites` | Favorite media ids; add `{sid, mid, name}`; remove `?mid=` | F6.4 |
+| POST | `/players/{pid}/favorite-now-playing` | Add the playing station to HEOS Favorites | F6.4 |
 | GET | `/sources/{sid}/browse?cid=&start=&count=&refresh=` | Browse a container; `playable` = the container can be queued whole | F5.2, F5.5 |
 | GET | `/sources/{sid}/search?q=&criteria=` | Search; 501 if the server does not support it | F5.4, F6.2 |
 | GET | `/sources/{sid}/search-criteria` | Search criteria (scid) | F5.4 |

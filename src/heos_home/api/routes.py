@@ -114,6 +114,12 @@ class PlayStreamBody(BaseModel):
     cid: str | None = None
 
 
+class AddFavoriteBody(BaseModel):
+    sid: int
+    mid: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+
+
 class PlayFavoriteBody(BaseModel):
     mid: str = Field(description="Media id of the favorite; its current position is looked up on the device")
 
@@ -385,6 +391,37 @@ async def play_favorite(pid: int, body: PlayFavoriteBody, svc: Services = Depend
     preset = await svc.library.favorite_preset(body.mid)
     await svc.players.play_preset(pid, preset)
     return {"preset": preset}
+
+
+@router.get("/favorites", tags=["library"])
+async def favorites(svc: Services = Depends(services)) -> dict[str, Any]:
+    """Media ids of the HEOS Favorites, to mark items and the playing station as favorites."""
+    return {"mids": await svc.library.favorite_mids()}
+
+
+@router.post("/favorites", tags=["library"], dependencies=write)
+async def add_favorite(body: AddFavoriteBody, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Add a station / Amazon album / playlist to HEOS Favorites (stored in the HEOS account)."""
+    await svc.library.add_favorite(body.sid, body.mid, body.name)
+    svc.bus.publish("favorites_changed")
+    return {"added": body.name}
+
+
+@router.post("/players/{pid}/favorite-now-playing", tags=["library"], dependencies=write)
+async def favorite_now_playing(pid: int, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Add the station playing on this player to HEOS Favorites."""
+    player = svc.players.get(pid)
+    await svc.library.add_now_playing_favorite(pid)
+    svc.bus.publish("favorites_changed")
+    return {"added": player.now_playing.get("station") or player.now_playing.get("song") or ""}
+
+
+@router.delete("/favorites", tags=["library"], dependencies=write)
+async def remove_favorite(mid: str = Query(min_length=1), svc: Services = Depends(services)) -> dict[str, Any]:
+    """Remove a station from HEOS Favorites. 404 if it is not a favorite."""
+    await svc.library.remove_favorite(mid)
+    svc.bus.publish("favorites_changed")
+    return {"removed": mid}
 
 
 @router.get("/library/servers", tags=["library"])

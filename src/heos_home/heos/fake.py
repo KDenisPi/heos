@@ -77,6 +77,10 @@ class _SystemError(Exception):
     """Answer eid 12, like the real NAS does for search."""
 
 
+class _OptionError(Exception):
+    """Answer eid 15 "Option not supported"."""
+
+
 class _AccountError(Exception):
     """Answer eid -1239 "User account error", like Amazon's upsell banner."""
 
@@ -244,6 +248,9 @@ class FakeHeosServer:
             return
         except _SystemError:
             self._reply(writer, command, "fail", "eid=12&text=System error&syserrno=-9")
+            return
+        except _OptionError:
+            self._reply(writer, command, "fail", f"eid=15&text=Option not supported&{query}")
             return
         except _AccountError:
             self._reply(writer, command, "fail", f"eid=-1239&text=User account error&{query}")
@@ -564,6 +571,27 @@ class FakeHeosServer:
         fav = FAVORITES[preset - 1]
         self._start_station(pl, FAVORITES_SID, fav["mid"], fav["name"])
         return f"pid={pl.pid}&preset={preset}"
+
+    def _cmd_browse__set_service_option(self, p: dict[str, str], w: asyncio.StreamWriter) -> str:
+        option = int(p["option"])
+        if option == 19:
+            if "pid" in p:  # the station playing now
+                st = self._player(p).station
+                if st is None:
+                    raise _OptionError
+                entry = {"mid": st["mid"], "name": st["name"]}
+            else:
+                entry = {"mid": p["mid"], "name": p["name"]}
+            if all(f["mid"] != entry["mid"] for f in FAVORITES):
+                FAVORITES.append({"container": "no", "type": "station", "playable": "yes", **entry})
+        elif option == 20:
+            before = len(FAVORITES)
+            FAVORITES[:] = [f for f in FAVORITES if f["mid"] != p["mid"]]
+            if len(FAVORITES) == before:
+                raise KeyError(p["mid"])
+        else:
+            raise _OptionError
+        return "&".join(f"{k}={encode_value(v)}" for k, v in p.items())
 
     def _cmd_browse__get_search_criteria(self, p: dict[str, str], w: asyncio.StreamWriter) -> tuple[str, Any]:
         if int(p["sid"]) == AMAZON_SID:

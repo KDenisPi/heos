@@ -98,6 +98,8 @@ export interface LibraryItem {
    * playlists, stations: replaces what is playing), "favorite" (HEOS Favorite).
    */
   play: "queue" | "stream" | "favorite";
+  /** Stations, Amazon albums and playlists can be added to HEOS Favorites. */
+  can_favorite: boolean;
 }
 
 // --------------------------------------------------------------- playlists
@@ -207,5 +209,6 @@ export type ServerEvent =
   | { type: "device_offline"; pid: number }
   | { type: "account"; data: Account }
   | { type: "playlists_changed"; data?: { id: string; deleted?: boolean } }
+  | { type: "favorites_changed" }
   | { type: "playlist_load"; pid: number; data: { id: string; done: number; total: number } }
   | { type: "devices_changed" | "players_changed" | "sources_changed" | "pong" };

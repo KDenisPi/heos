@@ -7,10 +7,13 @@ import RepeatOneIcon from "@mui/icons-material/RepeatOne";
 import ShuffleIcon from "@mui/icons-material/Shuffle";
 import SkipNextIcon from "@mui/icons-material/SkipNext";
 import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
+import StarIcon from "@mui/icons-material/Star";
+import StarBorderIcon from "@mui/icons-material/StarBorder";
 import StopIcon from "@mui/icons-material/Stop";
 import { Box, IconButton, LinearProgress, Stack, Tooltip, Typography } from "@mui/material";
 import { api } from "../api/client";
 import type { PlayerState, Repeat } from "../api/types";
+import { useFavorites } from "../hooks/useFavorites";
 import { useNow } from "../hooks/useNow";
 import { useAction } from "../notify";
 import { livePosition } from "../state/reducer";
@@ -35,6 +38,11 @@ export function NowPlaying({ player, compact = false }: { player: PlayerState; c
   const title = np.song || np.station || (isInput ? inputLabel(player.input!) : "Nothing playing");
   const subtitle = isInput ? "External input" : [np.artist, np.album].filter(Boolean).join(" · ");
   const pid = player.pid;
+  const favorites = useFavorites();
+  // Stations (Amazon, favorites) can be starred; external inputs and queue songs cannot.
+  const isStation = np.type === "station" && !isInput && Boolean(np.mid);
+  const isFavorite = isStation && favorites.mids.has(np.mid!);
+  const stationName = np.station || np.song || "station";
 
   const transport = (action: "play" | "pause" | "stop" | "next" | "prev") => {
     if (action === "play" || action === "pause" || action === "stop") store.patchPlayer(pid, { state: action });
@@ -77,9 +85,28 @@ export function NowPlaying({ player, compact = false }: { player: PlayerState; c
           )}
         </Box>
         <Box sx={{ minWidth: 0, textAlign: compact ? "left" : "center" }}>
-          <Typography variant={compact ? "subtitle1" : "h6"} noWrap title={title}>
-            {title}
-          </Typography>
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", justifyContent: compact ? "flex-start" : "center" }}>
+            <Typography variant={compact ? "subtitle1" : "h6"} noWrap title={title}>
+              {title}
+            </Typography>
+            {isStation && (
+              <Tooltip title={isFavorite ? "Remove from HEOS Favorites" : "Add to HEOS Favorites"}>
+                <IconButton
+                  size="small"
+                  color={isFavorite ? "primary" : "default"}
+                  aria-pressed={isFavorite}
+                  aria-label={isFavorite ? "Remove from HEOS Favorites" : "Add to HEOS Favorites"}
+                  onClick={() => (isFavorite ? favorites.remove(np.mid!, stationName) : favorites.addNowPlaying(pid, stationName))}
+                  sx={{ minWidth: 40, minHeight: 40 }}
+                >
+                  {isFavorite ? <StarIcon /> : <StarBorderIcon />}
+                </IconButton>
+              </Tooltip>
+            )}
+          </Stack>
+          {np.type === "station" && np.station && np.station !== title && (
+            <Typography variant="body2" color="text.secondary" noWrap>{np.station}</Typography>
+          )}
           <Typography variant="body2" color="text.secondary" noWrap title={subtitle}>
             {subtitle || " "}
           </Typography>

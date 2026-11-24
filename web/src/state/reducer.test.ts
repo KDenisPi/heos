@@ -87,3 +87,9 @@ describe("playlists", () => {
     expect(s.playlistLoad[-1]).toEqual({ id: "jazz", done: 10, total: 40 });
   });
 });
+
+describe("favorites", () => {
+  it("bumps the version on favorites_changed", () => {
+    expect(reduce(snap, { type: "favorites_changed" }).favoritesVersion).toBe(1);
+  });
+});

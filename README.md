@@ -23,7 +23,7 @@ Phase 1 backend (core):
 | Tablet PWA (React + MUI): now playing, volume, transport, queue with drag reorder, inputs, devices, power, settings | ✅ | §7 |
 | Queue sort: title / artist / album / random, asc/desc, fewest moves, retry on rejected moves | ✅ | F3.7 |
 | DLNA library: servers, folder browsing with paging and breadcrumb, play/queue tracks and folders, search where supported (filter fallback), 10 min cache, pinned folders, last folder | ✅ | F5.1–F5.5, F5.7 |
-| Amazon Music (browse, play streams, queue My Music tracks and albums) and HEOS Favorites | ✅ | F6.1–F6.5 |
+| Amazon Music (browse, play streams, queue My Music tracks and albums) and HEOS Favorites (play, add, remove) | ✅ | F6.1–F6.5 |
 | Local playlists: save queue (name only), list, load (3 modes), edit, sort, rename, duplicate, delete, import/export .m3u8 | ✅ | F4.1–F4.5 |
 | Re-match unresolved playlist items, HEOS sign-in, phone layout | next | F4.6, F7 |
 
@@ -34,7 +34,7 @@ and firmware the service is checked against here.
 
 | Model | Firmware | Network | Checked | What was checked |
 | --- | --- | --- | --- | --- |
-| Marantz PM7000N | 3.139.175 | Wi-Fi | 2026-11-23 | SSDP discovery, CLI connect, `player/get_players`; power state read and on/off switch via UPnP ACT (port 60006); `move_queue_item` semantics and queue sort; DLNA browse, paging, add folder/track to queue (NAS: search unsupported, eid 12); Amazon browse, Favorites, queue Amazon track and album (playback of streams/favorites not yet confirmed by ear) |
+| Marantz PM7000N | 3.139.175 | Wi-Fi | 2026-11-23 | SSDP discovery, CLI connect, `player/get_players`; power state read and on/off switch via UPnP ACT (port 60006); `move_queue_item` semantics and queue sort; DLNA browse, paging, add folder/track to queue (NAS: search unsupported, eid 12); Amazon browse, Favorites, queue Amazon track and album; station playback confirmed by ear; add/remove HEOS Favorite |
 
 The fake device (`heos_home/heos/fake.py`) reports firmware 3.84.410; that is a
 placeholder, not a tested real version.
@@ -121,7 +121,7 @@ curl -X POST localhost:8080/api/v1/players/-1234/queue/sort -H 'content-type: ap
 
 WebSocket `/api/v1/ws` sends a `snapshot` first, then events:
 `player_state`, `volume`, `now_playing`, `progress`, `queue_changed`,
-`play_mode`, `playback_error`, `power`, `queue_sort`, `playlists_changed`, `playlist_load`, `player_full`, `device_online`,
+`play_mode`, `playback_error`, `power`, `queue_sort`, `playlists_changed`, `playlist_load`, `favorites_changed`, `player_full`, `device_online`,
 `device_offline`, `devices_changed`, `players_changed`, `sources_changed`,
 `account`, `connection`. Send `{"type":"ping"}` to get a `pong`.
 

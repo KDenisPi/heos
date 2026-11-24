@@ -18,6 +18,7 @@ import QueueMusicIcon from "@mui/icons-material/QueueMusic";
 import RadioIcon from "@mui/icons-material/Radio";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import StarIcon from "@mui/icons-material/Star";
+import StarBorderIcon from "@mui/icons-material/StarBorder";
 import SearchIcon from "@mui/icons-material/Search";
 import {
   Avatar,
@@ -43,11 +44,13 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "../api/client";
 import type { AddMode, LibraryItem, LibrarySource, PathStep, QueueAddItem, Shortcut } from "../api/types";
+import { useFavorites } from "../hooks/useFavorites";
 import { useSelectedPid } from "../hooks/useSelectedPlayer";
 import { useAction, useNotify } from "../notify";
 import { useAppState } from "../state/store";
 
 const PAGE = 50;
+const FAVORITES_SID = 1028;
 
 interface Location {
   sid: number;
@@ -267,13 +270,17 @@ function ItemRow({
 /** What the actions apply to, and the three ways to add it to the queue. */
 function ActionBar({
   target,
+  isFavorite,
   onAdd,
   onPlay,
+  onToggleFavorite,
   onClear,
 }: {
   target: Target;
+  isFavorite: boolean;
   onAdd: (mode: AddMode) => void;
   onPlay: () => void;
+  onToggleFavorite: () => void;
   onClear: () => void;
 }) {
   const stream = target?.kind === "item" && target.item.play !== "queue";
@@ -306,6 +313,15 @@ function ActionBar({
           <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 260 }}>
             {target.item.play === "favorite" ? "HEOS Favorite" : "Plays as a stream"}: replaces what is playing, not added to the queue
           </Typography>
+          {target.item.can_favorite && (
+            <Button
+              variant="outlined"
+              startIcon={isFavorite ? <StarIcon /> : <StarBorderIcon />}
+              onClick={onToggleFavorite}
+            >
+              {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+            </Button>
+          )}
           <Button variant="contained" startIcon={<PlayArrowIcon />} onClick={onPlay}>Play</Button>
         </Stack>
       ) : (
@@ -330,6 +346,8 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
   const notify = useNotify();
   const enqueue = useEnqueue();
   const playStream = usePlayStream();
+  const favorites = useFavorites();
+  const favoritesVersion = useAppState((s) => s.favoritesVersion);
   const cid = loc.path.length ? loc.path[loc.path.length - 1].cid : null;
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [total, setTotal] = useState<number | null>(null);
@@ -369,6 +387,14 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
     loadPage(0);
     if (loc.path.length) api.setLastFolder(loc.sid, loc.path).catch(() => undefined);
   }, [loadPage, loc.sid, loc.path]);
+
+  // The Favorites list itself changes when a favorite is added or removed here.
+  useEffect(() => {
+    if (loc.sid === FAVORITES_SID && favoritesVersion > 0) {
+      setSelected(null);
+      loadPage(0, true);
+    }
+  }, [favoritesVersion, loc.sid, loadPage]);
 
   useEffect(() => {
     api.shortcuts().then((r) => setShortcuts(r.shortcuts)).catch(() => undefined);
@@ -506,6 +532,13 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
       </Box>
       <ActionBar
         target={target}
+        isFavorite={Boolean(selected?.mid && (selected.play === "favorite" || favorites.mids.has(selected.mid)))}
+        onToggleFavorite={() => {
+          if (!selected?.mid) return;
+          const isFav = selected.play === "favorite" || favorites.mids.has(selected.mid);
+          if (isFav) favorites.remove(selected.mid, selected.name);
+          else favorites.add({ sid: selected.sid, mid: selected.mid, name: selected.name });
+        }}
         onClear={() => setSelected(null)}
         onPlay={() => selected && playStream(selected)}
         onAdd={(mode) => {
