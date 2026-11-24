@@ -69,3 +69,12 @@ describe("livePosition", () => {
     expect(livePosition({ ...playing, state: "pause" }, 1_000, 9_000)).toBe(10_000);
   });
 });
+
+describe("queue sort progress", () => {
+  it("tracks the latest progress per player", () => {
+    let s = reduce(snap, { type: "queue_sort", pid: -1, data: { state: "running", done: 10, total: 40 } });
+    expect(s.queueSort[-1]).toEqual({ state: "running", done: 10, total: 40 });
+    s = reduce(s, { type: "queue_sort", pid: -1, data: { state: "done", done: 40, total: 40 } });
+    expect(s.queueSort[-1].state).toBe("done");
+  });
+});

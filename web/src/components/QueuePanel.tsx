@@ -6,14 +6,20 @@ import CloseIcon from "@mui/icons-material/Close";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import EqualizerIcon from "@mui/icons-material/Equalizer";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import ShuffleIcon from "@mui/icons-material/Shuffle";
+import SortByAlphaIcon from "@mui/icons-material/SortByAlpha";
+import SwapVertIcon from "@mui/icons-material/SwapVert";
 import {
   Box,
   CircularProgress,
+  Divider,
   IconButton,
+  LinearProgress,
   List,
   ListItem,
   ListItemButton,
   ListItemText,
+  ListSubheader,
   Menu,
   MenuItem,
   Stack,
@@ -21,23 +27,26 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
-import type { QueueItem } from "../api/types";
+import type { QueueItem, SortKey } from "../api/types";
 import { useAction } from "../notify";
 import { useAppState } from "../state/store";
 
 function Row({
   item,
   current,
+  locked,
   onPlay,
   onRemove,
 }: {
   item: QueueItem;
   current: boolean;
+  locked: boolean;
   onPlay: () => void;
   onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: item.qid,
+    disabled: locked,
   });
   return (
     <ListItem
@@ -46,7 +55,7 @@ function Row({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       sx={{ opacity: isDragging ? 0.6 : 1, zIndex: isDragging ? 1 : "auto", bgcolor: isDragging ? "background.paper" : undefined }}
       secondaryAction={
-        <IconButton edge="end" aria-label={`Remove ${item.song}`} onClick={onRemove}>
+        <IconButton edge="end" aria-label={`Remove ${item.song}`} onClick={onRemove} disabled={locked}>
           <CloseIcon fontSize="small" />
         </IconButton>
       }
@@ -82,6 +91,15 @@ export function QueuePanel({ pid }: { pid: number }) {
   const heosConnected = useAppState((s) => s.heos.connected);
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [menu, setMenu] = useState<HTMLElement | null>(null);
+  const [descending, setDescending] = useState(false);
+  const sort = useAppState((s) => s.queueSort[pid]);
+  const sorting = sort?.state === "running";
+
+  const sortBy = (by: SortKey) => {
+    setMenu(null);
+    const order = descending ? "desc" : "asc";
+    act(() => api.sortQueue(pid, by, order), by === "random" ? "Queue shuffled" : "Queue sorted");
+  };
 
   const load = useCallback(async () => {
     const res = await act(() => api.queue(pid));
@@ -132,11 +150,36 @@ export function QueuePanel({ pid }: { pid: number }) {
           >
             <ClearAllIcon fontSize="small" sx={{ mr: 1.5 }} /> Clear queue
           </MenuItem>
-          <MenuItem disabled>Sort… (coming next)</MenuItem>
+          <Divider />
+          <ListSubheader sx={{ lineHeight: "36px", bgcolor: "transparent" }}>Sort queue</ListSubheader>
+          {(["title", "artist", "album"] as const).map((key) => (
+            <MenuItem key={key} disabled={!items || items.length < 2 || sorting} onClick={() => sortBy(key)}>
+              <SortByAlphaIcon fontSize="small" sx={{ mr: 1.5 }} /> By {key}
+            </MenuItem>
+          ))}
+          <MenuItem onClick={() => setDescending((d) => !d)}>
+            <SwapVertIcon fontSize="small" sx={{ mr: 1.5 }} /> Order: {descending ? "Z → A" : "A → Z"}
+          </MenuItem>
+          <MenuItem disabled={!items || items.length < 2 || sorting} onClick={() => sortBy("random")}>
+            <ShuffleIcon fontSize="small" sx={{ mr: 1.5 }} /> Random order
+          </MenuItem>
+          <Divider />
           <MenuItem disabled>Save as playlist… (phase 3)</MenuItem>
         </Menu>
       </Stack>
-      <Box sx={{ flex: 1, overflowY: "auto", px: 1, pb: 2 }}>
+      {sorting && (
+        <Box sx={{ px: 2, pb: 1 }}>
+          <LinearProgress
+            variant={sort.total ? "determinate" : "indeterminate"}
+            value={sort.total ? ((sort.done ?? 0) / sort.total) * 100 : 0}
+            aria-label="Sorting queue"
+          />
+          <Typography variant="caption" color="text.secondary">
+            Sorting… {sort.total ? `${sort.done ?? 0} / ${sort.total} moves` : ""}
+          </Typography>
+        </Box>
+      )}
+      <Box sx={{ flex: 1, overflowY: "auto", px: 1, pb: 2, opacity: sorting ? 0.6 : 1 }}>
         {items === null ? (
           <Box sx={{ display: "grid", placeItems: "center", py: 4 }}>
             {heosConnected ? <CircularProgress size={28} /> : <Typography color="text.secondary">Not connected</Typography>}
@@ -154,7 +197,8 @@ export function QueuePanel({ pid }: { pid: number }) {
                     key={item.qid}
                     item={item}
                     current={item.qid === currentQid}
-                    onPlay={() => act(() => api.playQueueItem(pid, item.qid))}
+                    locked={sorting}
+                    onPlay={() => !sorting && act(() => api.playQueueItem(pid, item.qid))}
                     onRemove={() => remove(item.qid)}
                   />
                 ))}

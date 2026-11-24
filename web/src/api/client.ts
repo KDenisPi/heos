@@ -1,6 +1,6 @@
 // Thin REST client for /api/v1. Errors carry the service's {error:{code,message}}.
 
-import type { Account, Device, Health, InputItem, PlayerState, PowerInfo, QueueItem } from "./types";
+import type { Account, Device, Health, InputItem, PlayerState, PowerInfo, QueueItem, SortKey } from "./types";
 
 const BASE = "/api/v1";
 const TOKEN_KEY = "heos-home.token";
@@ -90,6 +90,8 @@ export const api = {
   playQueueItem: (pid: number, qid: number) => request("POST", `/players/${pid}/queue/play`, { qid }),
   removeFromQueue: (pid: number, qids: number[]) => request("DELETE", `/players/${pid}/queue`, { qids }),
   clearQueue: (pid: number) => request("DELETE", `/players/${pid}/queue`),
+  sortQueue: (pid: number, by: SortKey, order: "asc" | "desc" = "asc") =>
+    request<{ by: string; order: string; items: number; moves: number }>("POST", `/players/${pid}/queue/sort`, { by, order }),
   moveQueue: (pid: number, qids: number[], to: number) =>
     request("POST", `/players/${pid}/queue/move`, { qids, to }),
 };

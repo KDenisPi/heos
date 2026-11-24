@@ -21,7 +21,8 @@ Phase 1 backend (core):
 | Device info, firmware check, HEOS account status | ✅ | F7.1, F8.1, F8.2 |
 | Local cache for source logos and input icons | ✅ | §1 (no cloud dependency) |
 | Tablet PWA (React + MUI): now playing, volume, transport, queue with drag reorder, inputs, devices, power, settings | ✅ | §7 |
-| Queue sort, DLNA/Amazon browse + search, playlists, sign-in | next | F3.7, F4–F7 |
+| Queue sort: title / artist / album / random, asc/desc, fewest moves, retry on rejected moves | ✅ | F3.7 |
+| DLNA/Amazon browse + search, playlists, sign-in | next | F4–F7 |
 
 ## Tested devices
 
@@ -30,7 +31,7 @@ and firmware the service is checked against here.
 
 | Model | Firmware | Network | Checked | What was checked |
 | --- | --- | --- | --- | --- |
-| Marantz PM7000N | 3.139.175 | Wi-Fi | 2026-11-23 | SSDP discovery, CLI connect, `player/get_players`; power state read and on/off switch via UPnP ACT (port 60006) |
+| Marantz PM7000N | 3.139.175 | Wi-Fi | 2026-11-23 | SSDP discovery, CLI connect, `player/get_players`; power state read and on/off switch via UPnP ACT (port 60006); `move_queue_item` semantics and queue sort |
 
 The fake device (`heos_home/heos/fake.py`) reports firmware 3.84.410; that is a
 placeholder, not a tested real version.
@@ -108,9 +109,16 @@ curl localhost:8080/api/v1/devices/-1234/power
 curl -X POST localhost:8080/api/v1/devices/-1234/power -H 'content-type: application/json' -d '{"state":"off"}'
 ```
 
+Queue sort (F3.7) runs on the service as single `move_queue_item` calls; the
+request returns when done, with progress pushed as `queue_sort` events:
+
+```bash
+curl -X POST localhost:8080/api/v1/players/-1234/queue/sort -H 'content-type: application/json' -d '{"by":"album","order":"asc"}'
+```
+
 WebSocket `/api/v1/ws` sends a `snapshot` first, then events:
 `player_state`, `volume`, `now_playing`, `progress`, `queue_changed`,
-`play_mode`, `playback_error`, `power`, `player_full`, `device_online`,
+`play_mode`, `playback_error`, `power`, `queue_sort`, `player_full`, `device_online`,
 `device_offline`, `devices_changed`, `players_changed`, `sources_changed`,
 `account`, `connection`. Send `{"type":"ping"}` to get a `pong`.
 

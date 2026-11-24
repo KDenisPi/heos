@@ -91,6 +91,11 @@ class QueueMoveBody(BaseModel):
     to: int = Field(ge=1, description="Destination queue id")
 
 
+class QueueSortBody(BaseModel):
+    by: Literal["title", "artist", "album", "random", "track", "duration", "date_added"]
+    order: Literal["asc", "desc"] = "asc"
+
+
 class QueuePlayBody(BaseModel):
     qid: int
 
@@ -264,6 +269,20 @@ async def remove_from_queue(
 async def move_queue(pid: int, body: QueueMoveBody, svc: Services = Depends(services)) -> dict[str, Any]:
     await svc.players.move_queue(pid, body.qids, body.to)
     return {"moved": body.qids, "to": body.to}
+
+
+@router.post("/players/{pid}/queue/sort", tags=["queue"], dependencies=write)
+async def sort_queue(pid: int, body: QueueSortBody, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Sort the queue on the device (F3.7): title, artist, album or random.
+
+    HEOS does not report track number, duration or date added for queue items,
+    so those keys answer 400. Ties keep their current order (album tracks stay
+    in sequence). Progress is pushed as ``queue_sort`` WebSocket events.
+    """
+    try:
+        return await svc.players.sort_queue(pid, body.by, body.order)
+    except RuntimeError as err:
+        raise HTTPException(status_code=409, detail=str(err)) from err
 
 
 @router.post("/players/{pid}/queue/play", tags=["queue"], dependencies=write)

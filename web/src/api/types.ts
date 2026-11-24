@@ -70,6 +70,15 @@ export interface QueueItem {
   album_id?: string;
 }
 
+export type SortKey = "title" | "artist" | "album" | "random";
+
+export interface QueueSortProgress {
+  state: "running" | "done" | "failed";
+  done?: number;
+  total?: number;
+  error?: string;
+}
+
 export interface InputItem {
   input: string;
   name: string;
@@ -106,6 +115,7 @@ export type ServerEvent =
   | { type: "play_mode"; pid: number; data: { repeat: Repeat; shuffle: boolean } }
   | { type: "playback_error"; pid: number; data: { error: string } }
   | { type: "queue_changed"; pid: number }
+  | { type: "queue_sort"; pid: number; data: QueueSortProgress }
   | { type: "power"; pid: number; data: { state: PowerState } }
   | { type: "device_online"; pid: number; data?: Partial<Device> }
   | { type: "device_offline"; pid: number }

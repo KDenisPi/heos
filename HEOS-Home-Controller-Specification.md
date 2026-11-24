@@ -115,7 +115,7 @@ Priority: **M** = must (v1), **S** = should (v1 if time allows), **C** = could (
 | F3.4 | Now playing: title, artist, album, cover art, source, progress bar (from `player_now_playing_progress` events) | M |
 | F3.5 | Show the current HEOS queue; remove items; move items (`player/move_queue_item`); clear | M |
 | F3.6 | Add items from any source to the queue: play now, play next, add to end, replace and play (`add_to_queue` aid 1–4) | M |
-| F3.7 | Sort the queue by rule: title, artist, album, track number, duration, date added, random; ascending/descending. Runs on the server as a series of moves, or as clear + re-add | M |
+| F3.7 | Sort the queue by rule: title, artist, album, random; ascending/descending; ties keep their current order (album tracks stay in sequence). Runs on the server as single-item `move_queue_item` calls, moving only items outside the longest already-ordered run. Track number, duration and date added are not possible: `get_queue` does not report them, and clear + re-add is not possible because queue items carry no source id | M |
 | F3.8 | Multi-select in the queue for bulk remove/move | S |
 
 ### F4. Local playlists
@@ -256,7 +256,7 @@ REST handles commands and queries, and one WebSocket pushes state. Base path `/a
 | POST | `/players/{pid}/queue` | Add items `{"items":[…],"mode":"now\|next\|end\|replace"}` | F3.6 |
 | DELETE | `/players/{pid}/queue` | Remove `{"qids":[…]}` or clear all | F3.5 |
 | POST | `/players/{pid}/queue/move` | `{"qids":[…],"to":n}` | F3.5 |
-| POST | `/players/{pid}/queue/sort` | `{"by":"artist","order":"asc"}` | F3.7 |
+| POST | `/players/{pid}/queue/sort` | `{"by":"title\|artist\|album\|random","order":"asc\|desc"}`; progress as `queue_sort` events | F3.7 |
 | GET | `/sources` | Music sources incl. DLNA servers, Amazon | F5.1, F6 |
 | GET | `/sources/{sid}/browse?cid=&start=&count=` | Browse a container | F5.2 |
 | GET | `/sources/{sid}/search?q=&criteria=` | Search | F5.4, F6.2 |
@@ -353,7 +353,7 @@ Power control was the biggest unknown; it is now solved through the amp's UPnP A
 | R1 | Power on/off path is undocumented | No app power control in v1 | **Resolved 2026-11-23:** UPnP ACT `SetDevicePowerState` on port 60006 switches ON/OFF in ~1 s, no auth (PM7000N, firmware 3.139.175). Avoid frequent power cycling |
 | R2 | Amazon Music browse/search through CLI may be partial | F6 reduced | Test `browse/browse` + `browse/search` on Amazon sid early (phase 0) |
 | R3 | Streaming `mid`s in saved playlists may expire | F4 items unplayable | Store metadata; re-match by search (F4.6) |
-| R4 | HEOS queue sort has no native command; many `move_queue_item` calls on long queues | Slow sort (>500 items) | Use clear + re-add in batches when the queue has more than N items; measure in phase 1 |
+| R4 | HEOS queue sort has no native command; many `move_queue_item` calls on long queues | Slow sort (>500 items) | **Measured 2026-11-23 (PM7000N, 19 items):** 6–9 moves in 1.5–2.8 s. A multi-item move keeps queue order, so a sort is single moves; the planner moves only items outside the longest ordered run (n − LIS). The amp sometimes rejects a move with eid 12; the sort then re-reads the queue and re-plans (3 attempts) and verifies the result |
 | R5 | Firmware update changes CLI behaviour | Breakage | Pin tested firmware version in the README; integration tests against recorded responses |
 | R6 | HEOS CLI connection limit per device | Server competes with official app | Keep one connection; test with the official app open at the same time |
 | R7 | Native settings page may need a token, use self-signed HTTPS, or block framing | F8.3 / F8.4 reduced | Reverse proxy in the service; if it needs the app's token, fall back to the F8.5 help panel |

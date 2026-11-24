@@ -13,8 +13,9 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..heos.client import HeosClient
-from ..heos.protocol import HeosError, HeosMessage
+from ..heos.protocol import HeosCommandError, HeosError, HeosMessage
 from .events import EventBus
+from .queue_sort import plan_moves, sort_order
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +23,19 @@ TRANSPORT_STATES = {"play", "pause", "stop"}
 REPEAT_MODES = {"off", "on_all", "on_one"}
 ADD_MODES = {"now": 1, "next": 2, "end": 3, "replace": 4}
 QUEUE_PAGE = 100
+SORT_ATTEMPTS = 3
 AUX_SOURCE_NAME = "aux input"
+
+
+def _identity_keys(items: list[dict[str, Any]]) -> list[tuple[str, int]]:
+    """Stable identities for queue items: (media id, occurrence), since qids are positions."""
+    seen: dict[str, int] = {}
+    keys = []
+    for item in items:
+        mid = str(item.get("mid") or item.get("song") or "")
+        seen[mid] = seen.get(mid, 0) + 1
+        keys.append((mid, seen[mid]))
+    return keys
 
 
 def _int(value: Any, default: int | None = None) -> int | None:
@@ -79,6 +92,7 @@ class PlayerService:
         self._sources: list[dict[str, Any]] | None = None
         self.account: dict[str, Any] = {"signed_in": False, "username": None}
         self._refresh_lock = asyncio.Lock()
+        self._sorting: dict[int, asyncio.Lock] = {}
         client.add_event_listener(self._on_event)
         client.add_connection_listener(self._on_connection)
 
@@ -203,7 +217,9 @@ class PlayerService:
             }
             self.bus.publish("progress", pid, player.progress)
         elif name == "player_queue_changed" and pid is not None:
-            self.bus.publish("queue_changed", pid)
+            # During a sort every move fires this; one event is sent at the end.
+            if not self.sorting(pid):
+                self.bus.publish("queue_changed", pid)
         elif name == "repeat_mode_changed" and player:
             player.repeat = p.get("repeat", player.repeat)
             self.bus.publish("play_mode", pid, {"repeat": player.repeat, "shuffle": player.shuffle})
@@ -343,6 +359,62 @@ class PlayerService:
         self.get(pid)
         if qids:
             await self._cmd("player/move_queue_item", pid=pid, sqid=",".join(map(str, qids)), dqid=to)
+
+    def sorting(self, pid: int) -> bool:
+        lock = self._sorting.get(pid)
+        return bool(lock and lock.locked())
+
+    async def sort_queue(self, pid: int, by: str, order: str = "asc") -> dict[str, Any]:
+        """Sort the HEOS queue on the device (F3.7) with the fewest single moves.
+
+        The amp occasionally rejects a move (eid 12 "System error" seen on the
+        PM7000N). Then the sort re-reads the queue and plans again from where it
+        actually is, up to ``SORT_ATTEMPTS`` times, so it never stops halfway
+        silently. Raises ``ValueError`` for unknown or unavailable sort keys and
+        ``RuntimeError`` if the queue's content changed underneath the sort.
+        """
+        self.get(pid)
+        if order not in ("asc", "desc"):
+            raise ValueError("order must be 'asc' or 'desc'")
+        lock = self._sorting.setdefault(pid, asyncio.Lock())
+        if lock.locked():
+            raise RuntimeError("a sort of this queue is already running")
+        async with lock:
+            try:
+                items = await self.queue(pid)
+                new_order = sort_order(items, by, descending=order == "desc")
+                keys = _identity_keys(items)
+                target = [keys[i] for i in new_order]
+                sent = 0
+                for attempt in range(1, SORT_ATTEMPTS + 1):
+                    current = keys if attempt == 1 else _identity_keys(await self.queue(pid))
+                    if sorted(current) != sorted(target):
+                        raise RuntimeError("the queue changed while sorting; sort again")
+                    moves = plan_moves(current, target)
+                    total = sent + len(moves)
+                    self.bus.publish("queue_sort", pid, {"state": "running", "done": sent, "total": total})
+                    try:
+                        for sqid, dqid in moves:
+                            await self._cmd("player/move_queue_item", pid=pid, sqid=sqid, dqid=dqid)
+                            sent += 1
+                            if sent % 10 == 0 and sent < total:
+                                self.bus.publish("queue_sort", pid, {"state": "running", "done": sent, "total": total})
+                    except HeosCommandError as err:
+                        if err.eid not in (12, 13) or attempt == SORT_ATTEMPTS:
+                            raise
+                        log.warning("queue sort: move rejected (%s), re-planning (attempt %d)", err, attempt)
+                        await asyncio.sleep(0.5 * attempt)
+                        continue
+                    break
+                if _identity_keys(await self.queue(pid)) != target:
+                    raise RuntimeError("the queue changed while sorting; sort again")
+                self.bus.publish("queue_sort", pid, {"state": "done", "done": sent, "total": sent})
+                return {"by": by, "order": order, "items": len(items), "moves": sent}
+            except Exception as err:
+                self.bus.publish("queue_sort", pid, {"state": "failed", "error": str(err)})
+                raise
+            finally:
+                self.bus.publish("queue_changed", pid)
 
     async def add_to_queue(self, pid: int, items: list[dict[str, Any]], mode: str) -> None:
         """Add browse/search items to the queue (F3.6).
