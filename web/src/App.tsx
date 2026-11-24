@@ -1,11 +1,8 @@
-import { Box, CssBaseline, Divider, Stack, Typography, useMediaQuery } from "@mui/material";
+import { Box, CssBaseline, useMediaQuery } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { useEffect, useMemo, useState } from "react";
 import { NavRail, type View } from "./components/NavRail";
-import { NowPlaying } from "./components/NowPlaying";
-import { QueuePanel } from "./components/QueuePanel";
 import { StatusBanner } from "./components/StatusBanner";
-import { useSelectedPlayer } from "./hooks/useSelectedPlayer";
 import { useWakeLock } from "./hooks/useWakeLock";
 import { NotifyProvider, useNotify } from "./notify";
 import { usePrefs } from "./state/prefs";
@@ -14,47 +11,17 @@ import { makeTheme } from "./theme";
 import { DevicesView } from "./views/DevicesView";
 import { InputsView } from "./views/InputsView";
 import { SourceView } from "./views/SourceView";
+import { PlayingView } from "./views/PlayingView";
 import { PlaylistsView } from "./views/PlaylistsView";
+import { QueueView } from "./views/QueueView";
 import { SettingsView } from "./views/SettingsView";
 
-/**
- * The Playing screen: now playing and the queue side by side on wide screens
- * (tablet landscape), stacked on narrow ones (phone).
- */
-function PlayingView({ wide }: { wide: boolean }) {
-  const player = useSelectedPlayer();
-  if (!player) {
-    return (
-      <Typography color="text.secondary" sx={{ p: 3 }}>
-        No player yet. Check the Devices screen.
-      </Typography>
-    );
-  }
-  if (wide) {
-    return (
-      <Box sx={{ height: "100%", minHeight: 0, display: "grid", gridTemplateColumns: "minmax(360px, 480px) minmax(0, 1fr)" }}>
-        <Box sx={{ overflowY: "auto", borderRight: 1, borderColor: "divider", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-          <NowPlaying player={player} />
-        </Box>
-        <Stack sx={{ minHeight: 0 }}>
-          <QueuePanel pid={player.pid} />
-        </Stack>
-      </Box>
-    );
-  }
-  return (
-    <Stack sx={{ height: "100%", minHeight: 0 }}>
-      <NowPlaying player={player} />
-      <Divider />
-      <QueuePanel pid={player.pid} />
-    </Stack>
-  );
-}
-
-function MainView({ view, wide }: { view: View; wide: boolean }) {
+function MainView({ view }: { view: View }) {
   switch (view) {
     case "now":
-      return <PlayingView wide={wide} />;
+      return <PlayingView />;
+    case "queue":
+      return <QueueView />;
     case "inputs":
       return <InputsView />;
     case "devices":
@@ -78,9 +45,8 @@ function PlaybackErrors() {
 }
 
 function Shell() {
-  // Navigation rail + one view. Playing is a view of its own, so other screens
-  // get the full width, and the same layout works on a phone.
-  const wide = useMediaQuery("(min-width: 900px)");
+  // Navigation rail + one view. Playing and Queue are separate views, so each
+  // screen is a single column that also works on a phone.
   const [view, setView] = useState<View>("now");
 
   return (
@@ -89,8 +55,8 @@ function Shell() {
       <PlaybackErrors />
       <Box sx={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "80px minmax(0,1fr)" }}>
         <NavRail view={view} onView={setView} />
-        <Box component="main" sx={{ minWidth: 0, minHeight: 0, overflowY: view === "now" ? "hidden" : "auto", height: "100%" }}>
-          <MainView view={view} wide={wide} />
+        <Box component="main" sx={{ minWidth: 0, minHeight: 0, overflowY: view === "queue" ? "hidden" : "auto", height: "100%" }}>
+          <MainView view={view} />
         </Box>
       </Box>
     </Box>

@@ -1,3 +1,4 @@
+import FormatListNumberedIcon from "@mui/icons-material/FormatListNumbered";
 import InputIcon from "@mui/icons-material/Input";
 import LibraryMusicIcon from "@mui/icons-material/LibraryMusic";
 import PlayCircleIcon from "@mui/icons-material/PlayCircle";
@@ -10,10 +11,11 @@ import { selectPid, useSelectedDevice } from "../hooks/useSelectedPlayer";
 import { useAppState } from "../state/store";
 import { PowerButton } from "./PowerButton";
 
-export type View = "now" | "source" | "playlists" | "inputs" | "devices" | "settings";
+export type View = "now" | "queue" | "source" | "playlists" | "inputs" | "devices" | "settings";
 
 const ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: "now", label: "Playing", icon: <PlayCircleIcon /> },
+  { view: "queue", label: "Queue", icon: <FormatListNumberedIcon /> },
   { view: "source", label: "Source", icon: <LibraryMusicIcon /> },
   { view: "playlists", label: "Playlists", icon: <QueueMusicIcon /> },
   { view: "inputs", label: "Inputs", icon: <InputIcon /> },

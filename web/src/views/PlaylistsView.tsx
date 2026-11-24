@@ -98,7 +98,7 @@ function PlaylistList({ onOpen }: { onOpen: (id: string) => void }) {
         <CircularProgress />
       ) : playlists.length === 0 ? (
         <Typography color="text.secondary">
-          No playlists yet. Build a queue, then use “Save as playlist…” in the queue menu on the Playing screen.
+          No playlists yet. Build a queue, then use “Save as playlist…” in the menu of the Queue screen.
         </Typography>
       ) : (
         <List disablePadding>

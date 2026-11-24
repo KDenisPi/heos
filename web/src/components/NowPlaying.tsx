@@ -65,7 +65,7 @@ export function NowPlaying({ player, compact = false }: { player: PlayerState; c
         <Box
           sx={{
             width: coverSize,
-            maxWidth: compact ? 96 : 320,
+            maxWidth: compact ? 96 : 420,
             aspectRatio: "1 / 1",
             alignSelf: "center",
             borderRadius: 3,

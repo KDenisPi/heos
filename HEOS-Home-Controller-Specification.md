@@ -315,12 +315,13 @@ The primary layout is tablet landscape (1920 x 1200 px, about 1280 x 800 dp at t
 
 | Pane | Width | Content |
 | --- | --- | --- |
-| Left rail | 80 dp | Device switcher (each device listed with its own power button and state), nav icons: Playing, Source, Playlists, Inputs, Devices, Settings |
-| Main | flexible | Current view. Playing: now playing (cover, title, transport, progress, volume) beside the queue on wide screens, above it on narrow ones. Others: Source (DLNA / Amazon / Favorites), playlist editor, inputs grid, devices, settings |
+| Left rail | 80 dp | Device switcher (each device listed with its own power button and state), nav icons: Playing, Queue, Source, Playlists, Inputs, Devices, Settings |
+| Main | flexible | Current view, one column each. Playing: now playing (cover, title, transport, progress, volume). Queue: the current HEOS queue. Others: Source (DLNA / Amazon / Favorites), playlist editor, inputs grid, devices, settings |
 
 **Screens**
 
-1. **Playing** (nav item, start screen; now playing beside the queue): large cover art, transport, a seek bar that only displays progress (HEOS has no seek command), volume slider + mute, shuffle/repeat. The queue below supports drag to reorder, swipe to remove, a sort menu and "Save as playlist".
+1. **Playing** (nav item, start screen): large cover art, transport, a seek bar that only displays progress (HEOS has no seek command), volume slider with − / + and mute, shuffle/repeat.
+1a. **Queue** (nav item): the current HEOS queue on its own screen: tap to play an item, drag to reorder, remove, clear, a sort menu and "Save as playlist". Playing and Queue are separate screens so each is a single column, ready for the phone layout.
 2. **Source / Browse:** the list of media servers and streaming services (each DLNA server, Amazon Music, HEOS Favorites) and pinned folders, then a list of containers with a breadcrumb. Selecting never plays anything by itself: tapping a track selects it, tapping a folder opens it, and a folder's radio selects the folder. An action bar applies to the selected item, or to the whole open folder when nothing is selected: **Add and play**, **Replace queue and play**, **Add to end of queue** (later also Add to playlist…).
 3. **Search:** one box per source, results grouped by type (artist / album / track).
 4. **Playlists:** list of local playlists with item count and duration. Detail view supports inline editing, sort, load (replace/append), export.
@@ -330,7 +331,7 @@ The primary layout is tablet landscape (1920 x 1200 px, about 1280 x 800 dp at t
 Power is always per device: there is no app-wide power button, since each HEOS device has its own power state.
 7. **Settings:** HEOS account sign-in, theme, default device, backup/restore of config and playlists, about/version.
 
-**Phone layout (phase 2):** single pane with bottom navigation (Now playing · Source · Playlists · Inputs), and a mini-player bar above it that expands to full now-playing.
+**Phone layout (phase 2):** single pane with bottom navigation (Playing · Queue · Source · Playlists · Inputs), and a mini-player bar above it that expands to full now-playing.
 
 **Interaction rules**
 
