@@ -21,6 +21,18 @@ Phase 1 backend (core):
 | Device info, firmware check, HEOS account status | ✅ | F7.1, F8.1, F8.2 |
 | Queue sort, DLNA/Amazon browse + search, playlists, sign-in, PWA | next | F3.7, F4–F7 |
 
+## Tested devices
+
+HEOS firmware updates can change CLI behaviour (risk R5). Record each device
+and firmware the service is checked against here.
+
+| Model | Firmware | Network | Checked | What was checked |
+| --- | --- | --- | --- | --- |
+| Marantz PM7000N | 3.139.175 | Wi-Fi | 2026-11-23 | SSDP discovery, CLI connect, `player/get_players` |
+
+The fake device (`heos_home/heos/fake.py`) reports firmware 3.84.410; that is a
+placeholder, not a tested real version.
+
 ## Development
 
 Requires Python 3.11+ (Raspberry Pi OS Bookworm ships 3.11).
