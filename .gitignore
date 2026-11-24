@@ -6,3 +6,6 @@ __pycache__/
 /data/
 node_modules/
 dist/
+web/dist/
+web/dev-dist/
+*.tsbuildinfo

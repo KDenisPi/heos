@@ -8,7 +8,7 @@
 | HEOS_HOME_HOSTS          | (empty)              | Comma-separated manual device IPs (F1.2)      |
 | HEOS_HOME_DISCOVERY      | on                   | SSDP discovery at startup (on/off)            |
 | HEOS_HOME_TOKEN          | (empty)              | If set, write requests need this bearer token |
-| HEOS_HOME_STATIC_DIR     | (empty)              | Built PWA to serve at /                       |
+| HEOS_HOME_STATIC_DIR     | web/dist if built    | Built PWA to serve at /                       |
 | HEOS_HOME_LOG_LEVEL      | INFO                 | DEBUG also logs raw CLI traffic               |
 | HEOS_HOME_LOG_JSON       | on                   | Structured JSON logs (off = plain text)       |
 | HEOS_HOME_HEOS_PORT      | 1255                 | HEOS CLI port (change only for the fake)      |
@@ -19,6 +19,10 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+# Repo checkout layout: src/heos_home/settings.py -> <repo>/web/dist
+_REPO_WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 
 
 def _flag(value: str | None, default: bool) -> bool:
@@ -52,7 +56,7 @@ class Settings:
             hosts=[h.strip() for h in (env.get("HEOS_HOME_HOSTS") or "").split(",") if h.strip()],
             discovery=_flag(env.get("HEOS_HOME_DISCOVERY"), True),
             token=env.get("HEOS_HOME_TOKEN") or None,
-            static_dir=Path(static) if static else None,
+            static_dir=Path(static) if static else (_REPO_WEB_DIST if _REPO_WEB_DIST.is_dir() else None),
             log_level=(env.get("HEOS_HOME_LOG_LEVEL") or "INFO").upper(),
             log_json=_flag(env.get("HEOS_HOME_LOG_JSON"), True),
             heos_port=int(env.get("HEOS_HOME_HEOS_PORT") or 1255),

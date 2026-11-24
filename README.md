@@ -20,7 +20,8 @@ Phase 1 backend (core):
 | Power on/standby and power state via UPnP ACT (`auto` / `upnp_act` / `none` drivers) | ✅ | F2.1, F2.4, F2.5 |
 | Device info, firmware check, HEOS account status | ✅ | F7.1, F8.1, F8.2 |
 | Local cache for source logos and input icons | ✅ | §1 (no cloud dependency) |
-| Queue sort, DLNA/Amazon browse + search, playlists, sign-in, PWA | next | F3.7, F4–F7 |
+| Tablet PWA (React + MUI): now playing, volume, transport, queue with drag reorder, inputs, devices, power, settings | ✅ | §7 |
+| Queue sort, DLNA/Amazon browse + search, playlists, sign-in | next | F3.7, F4–F7 |
 
 ## Tested devices
 
@@ -64,6 +65,26 @@ HEOS_HOME_LOG_JSON=off .venv/bin/heos-home
 phase-0 protocol checks.
 
 All settings are environment variables; see `src/heos_home/settings.py`.
+
+## Frontend (web/)
+
+React + MUI (Material 3 look), TypeScript, Vite, installable PWA. Needs
+Node 20+ (here: Node 22 in `~/.local/node`, so `export PATH=$HOME/.local/node/bin:$PATH`).
+
+```bash
+cd web
+npm ci
+npm run dev        # http://localhost:5173, proxies /api to heos-home on :8080
+                   # (another API: HEOS_API=http://127.0.0.1:18081 npm run dev)
+npm test           # reducer unit tests (vitest)
+npm run build      # -> web/dist, served by heos-home at / automatically
+```
+
+Layout: tablet landscape (>= 1000 px) shows three panes: navigation rail,
+current view, and now playing + queue. Narrower screens fold now playing into
+a "Playing" view. State comes only from the WebSocket (snapshot, then events);
+the UI updates optimistically and reconciles with the next event. The volume
+slider sends at most every 150 ms while dragging, plus the final value.
 
 ## API quick reference
 
