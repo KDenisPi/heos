@@ -8,8 +8,9 @@ pushed to WebSocket clients through the ``EventBus``.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -30,6 +31,7 @@ SORT_ATTEMPTS = 3
 # when repeated a moment later. So moves are paced and retried.
 MOVE_GAP = 0.15
 MOVE_RETRY_DELAYS = (0.3, 0.6, 1.0, 1.5, 2.0)
+ADD_RETRY_DELAYS = (2.0, 4.0, 8.0, 8.0)
 AUX_SOURCE_NAME = "aux input"
 
 
@@ -100,6 +102,7 @@ class PlayerService:
         self.account: dict[str, Any] = {"signed_in": False, "username": None}
         self._refresh_lock = asyncio.Lock()
         self._sorting: dict[int, asyncio.Lock] = {}
+        self._bulk: dict[int, int] = {}  # pid -> nesting depth of bulk queue operations
         client.add_event_listener(self._on_event)
         client.add_connection_listener(self._on_connection)
 
@@ -224,8 +227,8 @@ class PlayerService:
             }
             self.bus.publish("progress", pid, player.progress)
         elif name == "player_queue_changed" and pid is not None:
-            # During a sort every move fires this; one event is sent at the end.
-            if not self.sorting(pid):
+            # During a sort or a playlist load every change fires this; one event is sent at the end.
+            if not self.sorting(pid) and not self._bulk.get(pid):
                 self.bus.publish("queue_changed", pid)
         elif name == "repeat_mode_changed" and player:
             player.repeat = p.get("repeat", player.repeat)
@@ -350,13 +353,19 @@ class PlayerService:
         await self._cmd("browse/play_input", pid=pid, spid=source_pid, input=input_name)
 
     # ---------------------------------------------------------------- queue
-    async def queue(self, pid: int) -> list[dict[str, Any]]:
-        """The whole HEOS queue, fetched in pages of 100."""
+    async def queue(self, pid: int, timeout: float | None = None) -> list[dict[str, Any]]:
+        """The whole HEOS queue, fetched in pages of 100.
+
+        The amp answers only after pending adds are applied, so after a bulk
+        load pass a generous ``timeout``.
+        """
         self.get(pid)
         items: list[dict[str, Any]] = []
         start = 0
         while True:
-            msg = await self._cmd("player/get_queue", pid=pid, range=f"{start},{start + QUEUE_PAGE - 1}")
+            msg = await self.client.command(
+                "player/get_queue", {"pid": pid, "range": f"{start},{start + QUEUE_PAGE - 1}"}, timeout=timeout
+            )
             page = list(msg.payload or [])
             for item in page:
                 item["qid"] = _int(item.get("qid"), item.get("qid"))
@@ -364,6 +373,23 @@ class PlayerService:
             if len(page) < QUEUE_PAGE:
                 return items
             start += QUEUE_PAGE
+
+    async def queue_count(self, pid: int, timeout: float | None = None) -> int:
+        """Number of queue items (a one-item read; ``count`` comes in the reply message)."""
+        msg = await self.client.command("player/get_queue", {"pid": pid, "range": "0,0"}, timeout=timeout)
+        if "count" in msg.params:
+            return int(msg.params["count"] or 0)
+        return len(await self.queue(pid, timeout=timeout))  # older firmware without count
+
+    async def wait_queue_count(self, pid: int, expected: int, timeout: float, interval: float = 0.5) -> int:
+        """Poll until the queue has at least ``expected`` items (adds are applied late) or time runs out."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while True:
+            count = await self.queue_count(pid, timeout=timeout)
+            if count >= expected or loop.time() >= deadline:
+                return count
+            await asyncio.sleep(interval)
 
     async def play_queue_item(self, pid: int, qid: int) -> None:
         self.get(pid)
@@ -397,6 +423,41 @@ class PlayerService:
         self.get(pid)
         if qids:
             await self._move(pid, ",".join(map(str, qids)), to)
+
+    @contextlib.asynccontextmanager
+    async def bulk(self, pid: int) -> AsyncIterator[None]:
+        """Hold back queue_changed events during many queue operations; send one at the end.
+
+        Every queue change makes clients re-read the queue, and the amp answers
+        a queue read only after its pending changes are applied (about 1 s per
+        add), so per-step events would flood the single CLI connection.
+        """
+        self._bulk[pid] = self._bulk.get(pid, 0) + 1
+        try:
+            yield
+        finally:
+            self._bulk[pid] -= 1
+            if not self._bulk[pid]:
+                del self._bulk[pid]
+                self.bus.publish("queue_changed", pid)
+
+    async def add_paced(self, pid: int, item: dict[str, Any], aid: int) -> None:
+        """One add_to_queue for bulk loads, retried while the amp's add backlog is full.
+
+        The PM7000N acknowledges an add in ~80 ms but applies it ~1 s later; with
+        about 14 adds pending it answers eid 9 ("Out of range"), and eid 12/13
+        while busy. The caller paces adds (``ADD_GAP``); this retries the rest.
+        """
+        for attempt, delay in enumerate((0.0, *ADD_RETRY_DELAYS)):
+            if delay:
+                await asyncio.sleep(delay)
+            try:
+                await self._add_one(pid, item, aid)
+                return
+            except HeosCommandError as err:
+                if err.eid not in (9, 12, 13) or attempt == len(ADD_RETRY_DELAYS):
+                    raise
+                log.info("add rejected while the amp is busy (%s), retrying in %.0f s", err.text, ADD_RETRY_DELAYS[attempt])
 
     def sorting(self, pid: int) -> bool:
         lock = self._sorting.get(pid)

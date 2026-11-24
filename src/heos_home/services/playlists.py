@@ -25,12 +25,12 @@ The HEOS queue does not report durations, so #EXTINF carries -1.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
 import time
 from collections import OrderedDict
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -40,12 +40,15 @@ from ..storage import Storage, atomic_write
 from .events import EventBus
 from .library import LibraryService
 from .players import PlayerService
-from .queue_sort import sort_order
+from .players import MOVE_GAP
+from .queue_sort import plan_moves, sort_order
 
 log = logging.getLogger(__name__)
 
 MAX_NAME = 120
 LOAD_MODES = ("now", "replace", "end")
+ADD_GAP = 1.0  # the PM7000N applies one add per ~1 s; faster adds pile up (eid 9 beyond ~14)
+LOAD_READ_TIMEOUT = 180.0
 
 
 class PlaylistExists(Exception):
@@ -393,47 +396,118 @@ class PlaylistService:
         return playlist.summary()
 
     # ----------------------------------------------------------- loading
-    async def _compact(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Replace runs that equal a whole container (in order) by the container: one command."""
-        result: list[dict[str, Any]] = []
-        i = 0
-        while i < len(items):
-            j = i
-            while j < len(items) and (items[j]["sid"], items[j]["cid"]) == (items[i]["sid"], items[i]["cid"]):
-                j += 1
-            run = items[i:j]
-            if len(run) > 1:
-                try:
-                    tracks = await self.library.tracks_of({"sid": run[0]["sid"], "cid": run[0]["cid"]})
-                    if [t["mid"] for t in tracks] == [r["mid"] for r in run]:
-                        result.append({"sid": run[0]["sid"], "cid": run[0]["cid"]})
-                        i = j
-                        continue
-                except Exception:  # noqa: BLE001 - fall back to single tracks
-                    pass
-            result += run
-            i = j
-        return result
+    async def _plan_adds(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """add_to_queue commands for ``items``: a whole container when the playlist
+        holds all of its tracks (one command), single tracks otherwise. The order
+        is fixed afterwards with moves, so it only needs to be close."""
+        groups: dict[tuple[int, str], list[dict[str, Any]]] = {}
+        for it in items:
+            groups.setdefault((it["sid"], it["cid"]), []).append(it)
+        whole: set[tuple[int, str]] = set()
+        for (sid, cid), members in groups.items():
+            mids = [m["mid"] for m in members]
+            if len(members) < 2 or len(set(mids)) != len(mids):
+                continue
+            try:
+                tracks = await self.library.tracks_of({"sid": sid, "cid": cid})
+            except Exception:  # noqa: BLE001 - fall back to single tracks
+                continue
+            if sorted(t["mid"] for t in tracks) == sorted(mids):
+                whole.add((sid, cid))
+        commands: list[dict[str, Any]] = []
+        done: set[tuple[int, str]] = set()
+        for it in items:
+            key = (it["sid"], it["cid"])
+            if key in whole:
+                if key not in done:
+                    commands.append({"sid": key[0], "cid": key[1]})
+                    done.add(key)
+            else:
+                commands.append(it)
+        return commands
 
     async def load(self, playlist_id: str, pid: int, mode: str) -> dict[str, Any]:
-        """Put a playlist into the HEOS queue (F4.3): now / replace / end (append)."""
+        """Put a playlist into the HEOS queue (F4.3): now / replace / end (append).
+
+        Measured on the PM7000N: an add is acknowledged in ~80 ms but applied
+        ~1 s later; ~14 pending adds make it answer eid 9, and a queue read
+        waits until pending adds are applied. So the load:
+
+        1. (replace) clears the queue;
+        2. appends everything at the end: whole containers in one command, other
+           tracks one by one, paced to the amp (``ADD_GAP``) and retried if busy;
+        3. waits until the queue count shows every track (a whole-container add
+           is applied late without making reads wait), then puts the appended
+           block into playlist order with the fewest paced moves;
+        4. (now) moves the block right after the current track in one command
+           and plays its first track; (replace) plays track 1.
+
+        Unresolved tracks are skipped and counted.
+        """
         if mode == "append":
             mode = "end"
         if mode not in LOAD_MODES:
             raise ValueError(f"mode must be one of {', '.join(LOAD_MODES)}")
-        self.players.get(pid)
+        player = self.players.get(pid)
         playlist = self.get(playlist_id)
         items = [{"sid": i.sid, "cid": i.cid, "mid": i.mid} for i in playlist.items if i.resolved]
         skipped = len(playlist.items) - len(items)
         if not items:
             raise ValueError("no track in this playlist can be played (all unresolved)")
-        commands = await self._compact(items)
-        progress: Callable[[int, int], None] = lambda done, total: self.bus.publish(  # noqa: E731
-            "playlist_load", pid, {"id": playlist_id, "done": done, "total": total})
         started = time.monotonic()
-        await self.players.add_to_queue(pid, commands, mode, expand=self.library.tracks_of, progress=progress)
+        commands = await self._plan_adds(items)
+        total = len(commands) + 2
+
+        def progress(done: int) -> None:
+            self.bus.publish("playlist_load", pid, {"id": playlist_id, "done": min(done, total), "total": total})
+
+        async with self.players.bulk(pid):
+            progress(0)
+            if mode == "replace":
+                await self.players.clear_queue(pid)
+            # Where the current track is, before anything is added (for "now").
+            np = player.now_playing
+            current = int(np.get("qid") or 0) if np.get("type") == "song" and mode == "now" else 0
+            base = len(await self.players.queue(pid, timeout=LOAD_READ_TIMEOUT))
+            current = min(current, base)
+            for k, command in enumerate(commands, 1):
+                if k > 1:
+                    await asyncio.sleep(ADD_GAP)  # let the amp apply the previous add
+                await self.players.add_paced(pid, command, aid=3)
+                progress(k)
+
+            # A single add makes queue reads wait until it is applied; a whole-container
+            # add does not (the read answers at once with the old queue). So poll the
+            # count until every track has arrived, then read the queue.
+            count = await self.players.wait_queue_count(pid, base + len(items), timeout=LOAD_READ_TIMEOUT)
+            if count < base + len(items):
+                raise RuntimeError(f"the amp applied only {count - base} of {len(items)} tracks; load it again")
+            queue = await self.players.queue(pid, timeout=LOAD_READ_TIMEOUT)
+            block = queue[base:]
+            from .players import _identity_keys  # noqa: PLC0415 - shared helper
+            got = _identity_keys(block)
+            want = _identity_keys([{"mid": it["mid"]} for it in items])
+            if sorted(got) != sorted(want):
+                raise RuntimeError("the queue changed while loading the playlist; load it again")
+            moves = plan_moves(got, want)
+            for n, (sqid, dqid) in enumerate(moves):
+                if n:
+                    await asyncio.sleep(MOVE_GAP)
+                await self.players._move(pid, base + sqid, base + dqid)
+            progress(len(commands) + 1)
+
+            first = base + 1
+            if mode == "now" and base > current:
+                # One block move keeps the block's order (multi-sqid moves keep queue order).
+                qids = ",".join(str(base + i) for i in range(1, len(items) + 1))
+                await asyncio.sleep(MOVE_GAP)
+                await self.players._move(pid, qids, current + 1)
+                first = current + 1
+            if mode in ("now", "replace"):
+                await self.players.play_queue_item(pid, first)
+            progress(total)
         await self.remember_queued(items)
-        log.info("loaded playlist %s: %d tracks in %d commands, %.1f s",
-                 playlist_id, len(items), len(commands), time.monotonic() - started)
+        log.info("loaded playlist %s (%s): %d tracks, %d adds, %d moves, %.1f s",
+                 playlist_id, mode, len(items), len(commands), len(moves), time.monotonic() - started)
         return {"id": playlist_id, "mode": mode, "tracks": len(items), "skipped": skipped,
-                "commands": len(commands)}
+                "commands": len(commands), "moves": len(moves)}

@@ -118,7 +118,7 @@ async def test_whole_folder_loads_as_one_command(app_env, fake):
     await http.post("/playlists", json={"name": "Big", "from_queue": PID})
     before = sum("add_to_queue" in c for c in fake.received)
     r = await http.post("/playlists/big/load", json={"pid": PID, "mode": "replace"})
-    assert r.json() == {"id": "big", "mode": "replace", "tracks": 120, "skipped": 0, "commands": 1}
+    assert r.json() == {"id": "big", "mode": "replace", "tracks": 120, "skipped": 0, "commands": 1, "moves": 0}
     assert sum("add_to_queue" in c for c in fake.received) - before == 1
     assert len(fake.players[PID].queue) == 120
 
@@ -184,3 +184,98 @@ async def test_files_copied_in_by_hand_appear(app_env, settings):
 async def test_path_traversal_rejected(app_env):
     _, _, http = app_env
     assert (await http.get("/playlists/..%2Fconfig")).status_code == 404
+
+
+# ------------------------------------------------- loading on a slow amp
+def amp_like(fake, apply=0.02, backlog=5):
+    """Make the fake behave like the PM7000N: adds applied later, small backlog (eid 9 beyond it)."""
+    fake.add_apply_seconds = apply
+    fake.add_backlog = backlog
+
+
+async def sorted_big_box(http, n=12):
+    """A playlist of n tracks from the 120-track folder, in a different order (not a whole container)."""
+    items = [{"title": f"Track {i:03d}", "artist": "Various", "album": "Big Box", "sid": DLNA,
+              "cid": "64$9$1$1", "mid": f"64$9$1$1${i}", "image_url": "", "resolved": True}
+             for i in range(n, 0, -1)]
+    await http.post("/playlists", json={"name": "Reverse"})
+    await http.patch("/playlists/reverse", json={"items": items})
+    return [i["title"] for i in items]
+
+
+async def test_load_many_single_tracks_on_a_slow_amp(app_env, fake, monkeypatch):
+    """Regression: 48 single adds overran the amp's backlog (eid 9) and the load stopped at 15."""
+    import heos_home.services.playlists as pl_mod
+    monkeypatch.setattr(pl_mod, "ADD_GAP", 0.03)
+    amp_like(fake)
+    _, _, http = app_env
+    titles = await sorted_big_box(http)
+    r = await http.post("/playlists/reverse/load", json={"pid": PID, "mode": "replace"})
+    assert r.status_code == 200, r.text
+    assert [i["song"] for i in fake.players[PID].queue] == titles
+    assert fake.players[PID].queue[fake.players[PID].current]["song"] == titles[0]
+    assert fake.backlog_rejections == 0
+
+
+async def test_whole_container_in_other_order_is_one_add_plus_moves(app_env, fake, monkeypatch):
+    """The Zauberflöte case: all tracks of one NAS container, sorted differently."""
+    import heos_home.services.playlists as pl_mod
+    import heos_home.services.players as players_mod
+    monkeypatch.setattr(players_mod, "MOVE_GAP", 0.0)
+    _, _, http = app_env
+    await http.post(f"/players/{PID}/queue", json={"items": [{"sid": DLNA, "cid": "64$1$4"}], "mode": "replace"})
+    await http.post("/playlists", json={"name": "Blue", "from_queue": PID})
+    pl = (await http.get("/playlists/blue")).json()
+    await http.patch("/playlists/blue", json={"items": pl["items"][::-1]})  # reversed: not container order
+    amp_like(fake)  # from here on the fake applies adds late, like the amp
+    before = sum("add_to_queue" in c for c in fake.received)
+    r = await http.post("/playlists/blue/load", json={"pid": PID, "mode": "replace"})
+    assert r.status_code == 200, r.text
+    assert sum("add_to_queue" in c for c in fake.received) - before == 1
+    assert r.json()["moves"] >= 1
+    assert [i["song"] for i in fake.players[PID].queue] == ["Blue in Green", "Freddie Freeloader", "So What"]
+
+
+async def test_add_and_play_puts_the_playlist_after_the_current_track(app_env, fake, monkeypatch):
+    import heos_home.services.playlists as pl_mod
+    import heos_home.services.players as players_mod
+    monkeypatch.setattr(pl_mod, "ADD_GAP", 0.0)
+    monkeypatch.setattr(players_mod, "MOVE_GAP", 0.0)
+    _, _, http = app_env
+    titles = await sorted_big_box(http, n=4)
+    await http.post(f"/players/{PID}/queue", json={"items": [{"sid": DLNA, "cid": "64$1$4"}], "mode": "replace"})
+    await http.post(f"/players/{PID}/queue/play", json={"qid": 2})  # Freddie Freeloader is playing
+    r = await http.post("/playlists/reverse/load", json={"pid": PID, "mode": "now"})
+    assert r.status_code == 200, r.text
+    pl = fake.players[PID]
+    assert [i["song"] for i in pl.queue] == ["So What", "Freddie Freeloader", *titles, "Blue in Green"]
+    assert pl.queue[pl.current]["song"] == titles[0]
+
+
+async def test_load_end_does_not_start_playback(app_env, fake, monkeypatch):
+    import heos_home.services.playlists as pl_mod
+    monkeypatch.setattr(pl_mod, "ADD_GAP", 0.0)
+    _, _, http = app_env
+    titles = await sorted_big_box(http, n=3)
+    await http.post(f"/players/{PID}/queue", json={"items": [{"sid": DLNA, "cid": "64$1$4"}], "mode": "end"})
+    await http.post(f"/players/{PID}/transport", json={"action": "stop"})
+    state_before = fake.players[PID].state
+    await http.post("/playlists/reverse/load", json={"pid": PID, "mode": "end"})
+    assert [i["song"] for i in fake.players[PID].queue][-3:] == titles
+    assert fake.players[PID].state == state_before
+
+
+async def test_load_sends_one_queue_changed(app_env, fake, monkeypatch):
+    import heos_home.services.playlists as pl_mod
+    monkeypatch.setattr(pl_mod, "ADD_GAP", 0.0)
+    _, svc, http = app_env
+    await sorted_big_box(http, n=5)
+    events = svc.bus.subscribe()
+    await http.post("/playlists/reverse/load", json={"pid": PID, "mode": "replace"})
+    from tests.conftest import wait_for
+    import asyncio
+    await asyncio.sleep(0.2)  # let late amp events arrive
+    types = []
+    while not events.empty():
+        types.append(events.get_nowait()["type"])
+    assert types.count("queue_changed") == 1

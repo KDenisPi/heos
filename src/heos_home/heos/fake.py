@@ -77,6 +77,10 @@ class _SystemError(Exception):
     """Answer eid 12, like the real NAS does for search."""
 
 
+_QUEUE_COMMANDS = {"player/get_queue", "player/move_queue_item", "player/remove_from_queue",
+                   "player/clear_queue", "player/play_queue"}
+
+
 class _BadCredentials(Exception):
     """eid 6 Invalid Credentials."""
 
@@ -181,6 +185,17 @@ class FakeHeosServer:
         self.move_busy_seconds = 0.0
         self.busy_rejections = 0
         self._last_move = 0.0
+        # Like the PM7000N: add_to_queue is acknowledged at once but applied
+        # later, one at a time (about 1 s each); more than ``add_backlog``
+        # pending adds are rejected with eid 9, and queue commands wait until
+        # the backlog is applied. 0 = apply immediately (default for tests).
+        self.add_apply_seconds = 0.0
+        self.add_backlog = 14
+        self.backlog_rejections = 0
+        self._pending_adds: list[Any] = []
+        self._drained = asyncio.Event()
+        self._drained.set()
+        self._apply_task: asyncio.Task[None] | None = None
         self._writers: dict[asyncio.StreamWriter, bool] = {}  # writer -> registered for events
         self._server: asyncio.base_events.Server | None = None
 
@@ -245,6 +260,8 @@ class FakeHeosServer:
         params = parse_message(query)
         if command in self.silent:
             return
+        if command in _QUEUE_COMMANDS and not self._drained.is_set():
+            await self._drained.wait()  # the amp answers queue commands only after pending adds are applied
         if command in self.under_process_for:
             self._send(writer, {"heos": {"command": command, "result": "success",
                                          "message": "command under process"}})
@@ -459,7 +476,8 @@ class FakeHeosServer:
             a, b = p["range"].split(",")
             start, end = int(a), min(int(b), int(a) + 99)
         items = [{k: v for k, v in it.items() if k != "duration"} for it in pl.queue[start:end + 1]]
-        return f"pid={pl.pid}&range={start},{end}", self._enc(items)
+        # Like the amp: "pid=..&range=..&returned=..&count=.."
+        return f"pid={pl.pid}&range={start},{end}&returned={len(items)}&count={len(pl.queue)}", self._enc(items)
 
     def _cmd_player__play_queue(self, p: dict[str, str], w: asyncio.StreamWriter) -> str:
         pl = self._player(p)
@@ -688,6 +706,29 @@ class FakeHeosServer:
             raise KeyError(p["sid"])
         tracks = self._tracks_for(p.get("cid", ""), p.get("mid"), sid)
         aid = int(p["aid"])
+        if aid not in (1, 2, 3, 4):
+            raise ValueError(aid)
+        if self.add_apply_seconds:
+            if len(self._pending_adds) >= self.add_backlog:
+                self.backlog_rejections += 1
+                raise ValueError("backlog full")  # eid 9 Out of range, as seen on the amp
+            self._pending_adds.append((pl, tracks, aid))
+            if p.get("mid"):  # single-track adds make queue reads wait; whole-container adds do not (PM7000N)
+                self._drained.clear()
+            if self._apply_task is None or self._apply_task.done():
+                self._apply_task = asyncio.get_running_loop().create_task(self._apply_backlog())
+        else:
+            self._apply_add(pl, tracks, aid)
+        return "&".join(f"{k}={encode_value(v)}" for k, v in p.items())
+
+    async def _apply_backlog(self) -> None:
+        while self._pending_adds:
+            await asyncio.sleep(self.add_apply_seconds)
+            pl, tracks, aid = self._pending_adds.pop(0)
+            self._apply_add(pl, tracks, aid)
+        self._drained.set()
+
+    def _apply_add(self, pl: FakePlayer, tracks: list[dict[str, Any]], aid: int) -> None:
         after_current = (pl.current + 1) if pl.current is not None else len(pl.queue)
         if aid == 4:
             pl.queue, pl.current = list(tracks), None
@@ -696,14 +737,11 @@ class FakeHeosServer:
         elif aid == 3:
             pl.queue.extend(tracks)
             self._queue_changed(pl)
-        elif aid in (1, 2):
+        else:  # 1 play now, 2 play next
             pl.queue[after_current:after_current] = tracks
             self._queue_changed(pl)
             if aid == 1:
                 self._play_index(pl, after_current)
-        else:
-            raise ValueError(aid)
-        return "&".join(f"{k}={encode_value(v)}" for k, v in p.items())
 
 
 async def _main() -> None:

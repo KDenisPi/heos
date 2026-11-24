@@ -60,6 +60,13 @@ class FakeAct:
         return httpx.MockTransport(handler)
 
 
+@pytest.fixture(autouse=True)
+def no_add_pacing(monkeypatch):
+    """The real 1 s pacing between playlist adds; tests that need it set it themselves."""
+    import heos_home.services.playlists as playlists_mod
+    monkeypatch.setattr(playlists_mod, "ADD_GAP", 0.0)
+
+
 @pytest.fixture
 def act() -> FakeAct:
     return FakeAct()
