@@ -35,6 +35,9 @@ def setup_logging(settings: Settings) -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(settings.log_level)
+    # The power poll makes an HTTP request every 30 s; keep httpx quiet unless debugging.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.DEBUG if settings.log_level == "DEBUG" else logging.WARNING)
     # Raw CLI traffic only at DEBUG (NFR Logging).
     logging.getLogger("heos_home.wire").setLevel(
         logging.DEBUG if settings.log_level == "DEBUG" else logging.WARNING

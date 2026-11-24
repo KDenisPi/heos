@@ -10,7 +10,6 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_validator
 
 from .. import __version__
-from ..services.power import make_driver
 from .app import Services
 
 
@@ -169,13 +168,18 @@ async def firmware(pid: int, svc: Services = Depends(services)) -> dict[str, Any
     }
 
 
+@router.get("/devices/{pid}/power", tags=["devices"])
+async def get_power(pid: int, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Read the power state from the device now (read only, F2.4; the "Test power" button)."""
+    svc.devices.describe(pid)  # 404 for unknown devices
+    await svc.power.refresh(pid)
+    return svc.devices.describe(pid)["power"]
+
+
 @router.post("/devices/{pid}/power", tags=["devices"], dependencies=write)
 async def set_power(pid: int, body: PowerBody, svc: Services = Depends(services)) -> dict[str, Any]:
-    dev = svc.devices.describe(pid)
-    cfg = svc.storage.config.data.device(pid)
-    driver = make_driver(dev["power"]["driver"], dev["ip_override"] or dev["ip"], cfg.power.config if cfg else {})
-    await driver.set_state(body.state)
-    return {"state": await driver.get_state()}
+    """Switch on or to standby (F2.1). No-op if already there; 429 if switched < 10 s ago."""
+    return await svc.power.set_power(pid, body.state == "on")
 
 
 # ------------------------------------------------------------------ players

@@ -44,7 +44,7 @@ def atomic_write(path: Path, data: bytes, mode: int = 0o644) -> None:
 
 # ---------------------------------------------------------------- models
 class PowerConfig(BaseModel):
-    driver: str = "none"  # none | heos_hidden | http_8080 | https_10443 (F2.5)
+    driver: str = "auto"  # auto | upnp_act | none (F2.5), see services/power.py
     config: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -67,8 +67,11 @@ class FolderShortcut(BaseModel):
     cid: str
 
 
+CONFIG_VERSION = 2
+
+
 class Config(BaseModel):
-    version: int = 1
+    version: int = CONFIG_VERSION
     default_pid: int | None = None
     devices: list[DeviceConfig] = Field(default_factory=list)
     folder_shortcuts: list[FolderShortcut] = Field(default_factory=list)
@@ -76,6 +79,19 @@ class Config(BaseModel):
 
     def device(self, pid: int) -> DeviceConfig | None:
         return next((d for d in self.devices if d.pid == pid), None)
+
+    def migrate(self) -> bool:
+        """Upgrade an older config in place; return True if anything changed."""
+        if self.version >= CONFIG_VERSION:
+            return False
+        if self.version < 2:
+            # v1 wrote driver "none" as a placeholder, before any power path
+            # existed; nobody chose it, so switch those devices to "auto".
+            for dev in self.devices:
+                if dev.power.driver == "none" and not dev.power.config:
+                    dev.power.driver = "auto"
+        self.version = CONFIG_VERSION
+        return True
 
 
 class State(BaseModel):
@@ -120,6 +136,9 @@ class Storage:
         (data_dir / "playlists").mkdir(exist_ok=True)
         self.config: JsonFile[Config] = JsonFile(data_dir / "config.json", Config)
         self.state: JsonFile[State] = JsonFile(data_dir / "state.json", State)
+        if self.config.path.exists() and self.config.data.migrate():
+            log.info("config.json migrated to version %d", self.config.data.version)
+            self.config.save()
 
     @property
     def playlists_dir(self) -> Path:

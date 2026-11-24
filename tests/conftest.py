@@ -4,6 +4,8 @@ import asyncio
 from collections.abc import AsyncIterator, Callable, Awaitable
 from pathlib import Path
 
+import re
+
 import httpx
 import pytest
 
@@ -22,6 +24,45 @@ async def wait_for(predicate: Callable[[], bool], timeout: float = 3.0) -> None:
         if loop.time() > deadline:
             raise AssertionError("condition not met in time")
         await asyncio.sleep(0.01)
+
+
+class FakeAct:
+    """Mocked UPnP ACT power service. Counts every SetDevicePowerState call."""
+
+    def __init__(self, power: str = "ON") -> None:
+        self.power = power
+        self.set_calls: list[str] = []
+        self.get_calls = 0
+        self.reachable = True
+
+    def transport(self) -> httpx.MockTransport:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if not self.reachable:
+                raise httpx.ConnectError("connection refused", request=request)
+            assert request.url.path == "/ACT/control" and request.url.port == 60006
+            action = request.headers["SOAPACTION"].strip('"').split("#")[1]
+            body = request.content.decode()
+            if action == "GetDevicePowerState":
+                self.get_calls += 1
+                inner = f"<devicePower>{self.power}</devicePower>"
+            elif action == "SetDevicePowerState":
+                value = re.search(r"<devicePower>(\w+)</devicePower>", body).group(1)
+                self.set_calls.append(value)
+                self.power = value
+                inner = ""
+            else:
+                return httpx.Response(500)
+            xml = (f'<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>'
+                   f'<u:{action}Response xmlns:u="urn:schemas-denon-com:service:ACT:1">{inner}'
+                   f'</u:{action}Response></s:Body></s:Envelope>')
+            return httpx.Response(200, text=xml)
+
+        return httpx.MockTransport(handler)
+
+
+@pytest.fixture
+def act() -> FakeAct:
+    return FakeAct()
 
 
 @pytest.fixture
@@ -51,9 +92,11 @@ def settings(tmp_path: Path) -> Settings:
 
 
 @pytest.fixture
-async def app_env(fake: FakeHeosServer, settings: Settings):
-    """A started app wired to the fake device, plus an HTTP client."""
+async def app_env(fake: FakeHeosServer, settings: Settings, act: FakeAct):
+    """A started app wired to the fake device and fake ACT service, plus an HTTP client."""
     svc = build_services(settings, fast_client(fake.port, host=None))
+    svc.power._transport = act.transport()
+    svc.power.settle_timeout = 2.0
     app = create_app(settings, svc)
     async with app.router.lifespan_context(app):
         assert await svc.client.wait_connected(3)

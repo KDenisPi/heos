@@ -17,7 +17,7 @@ Phase 1 backend (core):
 | Inputs read from the device, input select | ✅ | F3.3 |
 | Now playing + progress, pushed over WebSocket | ✅ | F3.4 |
 | Queue: list, add (now/next/end/replace), move, remove, clear, play item | ✅ | F3.5, F3.6 |
-| Power driver interface (`none` only; power is on the amp's remote for v1) | ✅ | F2.5 |
+| Power on/standby and power state via UPnP ACT (`auto` / `upnp_act` / `none` drivers) | ✅ | F2.1, F2.4, F2.5 |
 | Device info, firmware check, HEOS account status | ✅ | F7.1, F8.1, F8.2 |
 | Local cache for source logos and input icons | ✅ | §1 (no cloud dependency) |
 | Queue sort, DLNA/Amazon browse + search, playlists, sign-in, PWA | next | F3.7, F4–F7 |
@@ -29,7 +29,7 @@ and firmware the service is checked against here.
 
 | Model | Firmware | Network | Checked | What was checked |
 | --- | --- | --- | --- | --- |
-| Marantz PM7000N | 3.139.175 | Wi-Fi | 2026-11-23 | SSDP discovery, CLI connect, `player/get_players` |
+| Marantz PM7000N | 3.139.175 | Wi-Fi | 2026-11-23 | SSDP discovery, CLI connect, `player/get_players`; power state read and on/off switch via UPnP ACT (port 60006) |
 
 The fake device (`heos_home/heos/fake.py`) reports firmware 3.84.410; that is a
 placeholder, not a tested real version.
@@ -77,9 +77,19 @@ curl -X PUT  localhost:8080/api/v1/players/-1234/input     -H 'content-type: app
 curl -X POST localhost:8080/api/v1/players/-1234/transport -H 'content-type: application/json' -d '{"action":"pause"}'
 ```
 
+Power (F2): the HEOS CLI keeps answering in standby, so power uses the UPnP
+"ACT" service the HEOS app uses (port 60006). `GET /devices/{pid}/power` only
+reads; `POST` switches, but does nothing if the amp is already in that state
+and refuses (429) a second switch within 10 s, to spare the hardware.
+
+```bash
+curl localhost:8080/api/v1/devices/-1234/power
+curl -X POST localhost:8080/api/v1/devices/-1234/power -H 'content-type: application/json' -d '{"state":"off"}'
+```
+
 WebSocket `/api/v1/ws` sends a `snapshot` first, then events:
 `player_state`, `volume`, `now_playing`, `progress`, `queue_changed`,
-`play_mode`, `playback_error`, `player_full`, `device_online`,
+`play_mode`, `playback_error`, `power`, `player_full`, `device_online`,
 `device_offline`, `devices_changed`, `players_changed`, `sources_changed`,
 `account`, `connection`. Send `{"type":"ping"}` to get a `pong`.
 
@@ -91,8 +101,8 @@ the device returned can be fetched, so the endpoint is not an open proxy. The
 cache is safe to delete and does not need backing up.
 
 Errors are JSON `{"error":{"code","message",…}}`: 404 unknown id, 400 bad
-value, 503 amp not connected, 504 amp timeout, 502 HEOS `fail` (with `eid`),
-501 power not supported.
+value, 503 amp not connected, 504 amp timeout, 502 HEOS `fail` (with `eid`)
+or power request failed, 501 no power driver, 429 power switched too recently.
 
 ## Deployment (Pi 4, venv + systemd)
 
@@ -116,7 +126,7 @@ src/heos_home/
   heos/fake.py        fake HEOS device for tests and UI work
   services/players.py player state cache, events, player and queue commands
   services/devices.py discovery, overrides, choice of CLI host
-  services/power.py   power driver interface
+  services/power.py   power drivers (UPnP ACT) and power state polling
   api/                FastAPI app, REST routes, WebSocket
   storage.py          config.json / state.json, atomic writes
 tests/                protocol, client and API tests against the fake device

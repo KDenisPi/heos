@@ -57,7 +57,7 @@ flowchart TB
     API["API layer<br/>FastAPI: REST /api/v1, WebSocket /ws,<br/>serves the PWA; SSDP discovery"]
     PL["Player service<br/>queue, sort, inputs<br/>volume, now playing"]
     CLI["HEOS CLI client<br/>1 socket :1255<br/>heartbeat, events"]
-    PW["Power drivers<br/>hidden path / HTTP<br/>not in v1"]
+    PW["Power drivers<br/>UPnP ACT :60006<br/>state poll 30 s"]
     ST["Playlist store<br/>M3U8 files<br/>config.json"]
     API --> PL
     API --> CLI
@@ -67,7 +67,7 @@ flowchart TB
   T -->|REST + WebSocket| API
   P -->|REST + WebSocket| API
   K -->|REST + WebSocket| API
-  CLI -->|TCP 1255, JSON| AMP["Marantz PM7000N<br/>HEOS CLI :1255<br/>+ hidden power path"]
+  CLI -->|TCP 1255, JSON| AMP["Marantz PM7000N<br/>HEOS CLI :1255<br/>+ UPnP ACT power :60006"]
   DLNA["DLNA servers<br/>NAS / PC media<br/>UPnP AV"] -->|UPnP| AMP
   AM["Amazon Music<br/>cloud service<br/>login kept in HEOS account"] -->|amp streams directly from Amazon| AMP
   style CLI stroke-width:2px
@@ -80,7 +80,7 @@ The amp fetches media itself, from DLNA servers and from Amazon using the Amazon
 | Client to service | HTTP REST + WebSocket | 8080 (LAN) |
 | Service to HEOS device | HEOS CLI, ASCII + `\r\n`, JSON responses | TCP 1255 |
 | Discovery | SSDP M-SEARCH | UDP 1900 multicast |
-| Power (to be confirmed) | Hidden HEOS command, or HTTP 8080 / HTTPS 10443 | see section 9 |
+| Power on/off and power state | UPnP SOAP, ACT service (`GetDevicePowerState` / `SetDevicePowerState`) | TCP 60006 |
 
 ## 4. Functional requirements
 
@@ -100,10 +100,10 @@ Priority: **M** = must (v1), **S** = should (v1 if time allows), **C** = could (
 
 | ID | Requirement | Pri |
 | --- | --- | --- |
-| F2.1 | Power off and on through the HEOS app's undocumented path (found by traffic capture, see section 9). v1: power is switched with the amp's own remote; decide later | C |
+| F2.1 | Power on and to standby through the UPnP ACT service the HEOS app uses (`SetDevicePowerState` ON/OFF, port 60006; verified on PM7000N, see section 9). Gentle: a request for the current state does nothing, and switches are at least 10 s apart | M |
 | F2.3 | Wake by starting playback / `play_input` when the amp is in network standby | S |
-| F2.4 | Show power state, from events or polling | M |
-| F2.5 | Pluggable power driver per device (`heos_hidden`, `http_8080`, `https_10443`) | S |
+| F2.4 | Show power state (`on` / `standby` / `unknown`) from `GetDevicePowerState`: read at connect, polled every 30 s, re-read when a HEOS volume event hints at a change. The HEOS CLI itself answers in standby, so CLI reachability is not power state | M |
+| F2.5 | Pluggable power driver per device: `auto` (default: `upnp_act` if the device answers it), `upnp_act`, `none`. Telnet port 23 (`PW?`, `PWON`, `PWSTANDBY`) is a possible fallback driver | S |
 
 ### F3. Player and queue
 
@@ -197,12 +197,12 @@ There is no database. Settings live in JSON files and each playlist is its own M
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "default_pid": -1234,
   "devices": [
     {"pid": -1234, "name": "Living room", "model": "Marantz PM7000N",
      "ip": "192.168.1.50", "ip_override": null,
-     "power": {"driver": "heos_hidden", "config": {}}}
+     "power": {"driver": "auto", "config": {}}}
   ],
   "folder_shortcuts": [
     {"name": "Classical", "sid": 1, "cid": "64$1$3"}
@@ -243,7 +243,8 @@ REST handles commands and queries, and one WebSocket pushes state. Base path `/a
 | GET | `/devices` | List devices + state | F1.4 |
 | POST | `/devices/discover` | Force rediscovery | F1.1, F1.5 |
 | PATCH | `/devices/{pid}` | IP override, power driver config | F1.2, F2.5 |
-| POST | `/devices/{pid}/power` | `{"state":"on"\|"off"}` | F2 |
+| GET | `/devices/{pid}/power` | Read power state now ("Test power") | F2.4 |
+| POST | `/devices/{pid}/power` | `{"state":"on"\|"off"}`; 429 if switched < 10 s ago | F2.1 |
 | GET | `/players/{pid}/state` | Play state, volume, mute, input, now playing | F3 |
 | POST | `/players/{pid}/transport` | `{"action":"play\|pause\|stop\|next\|prev"}` | F3.1 |
 | PUT | `/players/{pid}/volume` | `{"level":0-100}` or `{"step":±n}` | F3.2 |
@@ -343,20 +344,20 @@ The primary layout is tablet landscape (1920 x 1200 px, about 1280 x 800 dp at t
 
 ## 9. Risks, open questions, roadmap
 
-The biggest unknown is power control, but it does not block v1: the amp's own remote covers power until a traffic capture shows how the official app does it. Everything else uses the documented HEOS CLI.
+Power control was the biggest unknown; it is now solved through the amp's UPnP ACT service (R1, Q1). Everything else uses the documented HEOS CLI.
 
 **Risks and open questions**
 
 | # | Item | Impact | Mitigation / next step |
 | --- | --- | --- | --- |
-| R1 | Power on/off path is undocumented | No app power control in v1 | v1: physical remote. Later: probe ports 23/8080/10443, capture HEOS app traffic with PCAPdroid, then decide |
+| R1 | Power on/off path is undocumented | No app power control in v1 | **Resolved 2026-11-23:** UPnP ACT `SetDevicePowerState` on port 60006 switches ON/OFF in ~1 s, no auth (PM7000N, firmware 3.139.175). Avoid frequent power cycling |
 | R2 | Amazon Music browse/search through CLI may be partial | F6 reduced | Test `browse/browse` + `browse/search` on Amazon sid early (phase 0) |
 | R3 | Streaming `mid`s in saved playlists may expire | F4 items unplayable | Store metadata; re-match by search (F4.6) |
 | R4 | HEOS queue sort has no native command; many `move_queue_item` calls on long queues | Slow sort (>500 items) | Use clear + re-add in batches when the queue has more than N items; measure in phase 1 |
 | R5 | Firmware update changes CLI behaviour | Breakage | Pin tested firmware version in the README; integration tests against recorded responses |
 | R6 | HEOS CLI connection limit per device | Server competes with official app | Keep one connection; test with the official app open at the same time |
 | R7 | Native settings page may need a token, use self-signed HTTPS, or block framing | F8.3 / F8.4 reduced | Reverse proxy in the service; if it needs the app's token, fall back to the F8.5 help panel |
-| Q1 | Does PM7000N expose any of 23 / 8080 / 10443? | Picks the power driver | Run the probe commands in HEOS.md |
+| Q1 | Does PM7000N expose any of 23 / 8080 / 10443? | Picks the power driver | **Answered:** open ports 23, 80, 443, 1255, 10101, 60006; 8080 and 10443 closed; 80/443 answer 403. Telnet 23 works (`PW?` → `PWON`/`PWSTANDBY`) |
 | Q2 | Does `play_input` wake the amp from network standby? | F2.3 | Test with Network Control = On |
 | Q3 | What URL and protocol does the official app use for the native settings page? Can it also be the power path? | F8.3, F8.4, maybe F2 | Capture it in the same PCAPdroid session as R1 (open Settings → device → advanced in the app) |
 

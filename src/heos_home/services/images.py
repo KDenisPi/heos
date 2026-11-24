@@ -75,13 +75,13 @@ class ImageCache:
         )
 
     async def stop(self) -> None:
+        http, self._http = self._http, None
         for task in list(self._tasks):
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
         self._save_index()
-        if self._http:
-            await self._http.aclose()
-            self._http = None
+        if http:
+            await http.aclose()
 
     def _load_index(self) -> None:
         try:
@@ -162,6 +162,8 @@ class ImageCache:
 
     async def prefetch(self, urls: list[str]) -> None:
         for url in urls:
+            if self._http is None:  # stopped; a cancel may have been swallowed by httpx
+                return
             key = image_key(url)
             try:
                 await self.get(key)

@@ -18,7 +18,7 @@ from ..services.devices import DeviceService
 from ..services.events import EventBus
 from ..services.images import ImageCache, ImageError
 from ..services.players import PlayerService
-from ..services.power import PowerNotSupported
+from ..services.power import PowerDriverError, PowerManager, PowerNotSupported, PowerRateLimited
 from ..settings import Settings
 from ..storage import Storage
 
@@ -34,6 +34,7 @@ class Services:
     players: PlayerService
     devices: DeviceService
     images: ImageCache
+    power: PowerManager
 
 
 def build_services(settings: Settings, client: HeosClient | None = None) -> Services:
@@ -43,7 +44,9 @@ def build_services(settings: Settings, client: HeosClient | None = None) -> Serv
     players = PlayerService(client, bus)
     devices = DeviceService(settings, storage, client, players, bus)
     images = ImageCache(storage.images_dir)
-    return Services(settings, storage, bus, client, players, devices, images)
+    power = PowerManager(storage, players, client, bus)
+    devices.power = power
+    return Services(settings, storage, bus, client, players, devices, images, power)
 
 
 def create_app(settings: Settings | None = None, services: Services | None = None) -> FastAPI:
@@ -55,10 +58,12 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         await svc.images.start()
         await svc.client.start()
         await svc.devices.start()
+        await svc.power.start()
         log.info("heos-home %s started, data dir %s", __version__, settings.data_dir)
         try:
             yield
         finally:
+            await svc.power.stop()
             await svc.devices.stop()
             await svc.client.stop()
             await svc.images.stop()
@@ -116,3 +121,13 @@ def _install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(PowerNotSupported)
     async def _no_power(_: Request, exc: PowerNotSupported) -> JSONResponse:
         return _error(501, "power_not_supported", str(exc))
+
+    @app.exception_handler(PowerRateLimited)
+    async def _power_rate(_: Request, exc: PowerRateLimited) -> JSONResponse:
+        resp = _error(429, "power_rate_limited", str(exc), retry_after=round(exc.retry_after, 1))
+        resp.headers["Retry-After"] = str(max(1, round(exc.retry_after)))
+        return resp
+
+    @app.exception_handler(PowerDriverError)
+    async def _power_fail(_: Request, exc: PowerDriverError) -> JSONResponse:
+        return _error(502, "power_error", str(exc))

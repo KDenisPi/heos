@@ -19,7 +19,7 @@ from ..settings import Settings
 from ..storage import DeviceConfig, PowerConfig, Storage
 from .events import EventBus
 from .players import PlayerService
-from .power import KNOWN_DRIVERS
+from .power import KNOWN_DRIVERS, PowerManager
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +42,7 @@ class DeviceService:
         self.last_discovery: float | None = None
         self._discover_lock = asyncio.Lock()
         self._discovery_task: asyncio.Task[Any] | None = None
+        self.power: PowerManager | None = None  # set by build_services
         # Registered after PlayerService, so the player list is fresh when this runs.
         client.add_connection_listener(self._on_connection)
 
@@ -141,10 +142,18 @@ class DeviceService:
             "online": bool(live and live.online),
             "connection_host": bool(self.client.connected and self.client.host in {ip, dev and dev.ip_override}),
             "default": cfg.default_pid == pid,
-            "power": {
-                "driver": dev.power.driver if dev else "none",
-                "state": "unknown",  # F2.4: no power state over the documented CLI
-            },
+            "power": self._power_info(pid, dev),
+        }
+
+    def _power_info(self, pid: int, dev: DeviceConfig | None) -> dict[str, Any]:
+        if self.power is None:
+            return {"driver": dev.power.driver if dev else "auto", "effective_driver": None,
+                    "state": "unknown", "error": None}
+        return {
+            "driver": self.power.configured_driver(pid),
+            "effective_driver": self.power.driver_name(pid),
+            "state": self.power.state(pid),
+            "error": self.power.errors.get(pid),
         }
 
     async def update(
@@ -174,6 +183,8 @@ class DeviceService:
             if driver not in KNOWN_DRIVERS:
                 raise ValueError(f"power driver must be one of {KNOWN_DRIVERS}")
             dev.power = PowerConfig(driver=driver, config=power.get("config", dev.power.config))
+            if self.power:
+                self.power.forget(pid)
         if default:
             cfg.default_pid = pid
         self.storage.config.save()

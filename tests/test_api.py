@@ -35,12 +35,6 @@ async def test_patch_device_power_driver_validation(app_env):
     assert r.json()["power"]["driver"] == "none"
 
 
-async def test_power_not_supported_yet(app_env):
-    _, _, http = app_env
-    r = await http.post(f"/devices/{PID}/power", json={"state": "off"})
-    assert r.status_code == 501
-
-
 async def test_player_state_and_volume(app_env, fake):
     _, svc, http = app_env
     state = (await http.get(f"/players/{PID}/state")).json()
