@@ -1,0 +1,24 @@
+[Unit]
+Description=HEOS Home Controller
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=heos-home
+Group=heos-home
+WorkingDirectory=/opt/heos-home
+EnvironmentFile=-/etc/heos-home/env
+ExecStart=/opt/heos-home/.venv/bin/heos-home
+Restart=always
+RestartSec=2
+StateDirectory=heos-home
+StateDirectoryMode=0750
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/heos-home
+
+[Install]
+WantedBy=multi-user.target
