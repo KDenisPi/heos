@@ -31,6 +31,7 @@ INPUTS = [
 ]
 
 DLNA_SID = 111
+LOGO = "https://logos.example.invalid/media/images/service/logos"
 LIBRARY: dict[str, list[dict[str, Any]]] = {
     # cid -> items; "" is the server root.
     "": [
@@ -394,12 +395,12 @@ class FakeHeosServer:
     # --------------------------------------------------------------- browse
     def _cmd_browse__get_music_sources(self, p: dict[str, str], w: asyncio.StreamWriter) -> tuple[str, Any]:
         return "", [
-            {"name": "Amazon Music", "image_url": "", "type": "music_service", "sid": 13, "available": "true",
+            {"name": "Amazon Music", "image_url": f"{LOGO}/amazon.png", "type": "music_service", "sid": 13, "available": "true",
              "service_username": "user@example.com"},
-            {"name": "Local Music", "image_url": "", "type": "heos_server", "sid": 1024, "available": "true"},
+            {"name": "Local Music", "image_url": f"{LOGO}/musicsource_logo_servers.png", "type": "heos_server", "sid": 1024, "available": "true"},
             {"name": "Playlists", "image_url": "", "type": "heos_service", "sid": 1025, "available": "true"},
             {"name": "History", "image_url": "", "type": "heos_service", "sid": 1026, "available": "true"},
-            {"name": "AUX Input", "image_url": "", "type": "heos_service", "sid": 1027, "available": "true"},
+            {"name": "AUX Input", "image_url": f"{LOGO}/musicsource_logo_aux.png", "type": "heos_service", "sid": 1027, "available": "true"},
             {"name": "Favorites", "image_url": "", "type": "heos_service", "sid": 1028, "available": "true"},
         ]
 

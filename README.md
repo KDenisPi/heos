@@ -19,6 +19,7 @@ Phase 1 backend (core):
 | Queue: list, add (now/next/end/replace), move, remove, clear, play item | ✅ | F3.5, F3.6 |
 | Power driver interface (`none` only; power is on the amp's remote for v1) | ✅ | F2.5 |
 | Device info, firmware check, HEOS account status | ✅ | F7.1, F8.1, F8.2 |
+| Local cache for source logos and input icons | ✅ | §1 (no cloud dependency) |
 | Queue sort, DLNA/Amazon browse + search, playlists, sign-in, PWA | next | F3.7, F4–F7 |
 
 ## Tested devices
@@ -81,6 +82,13 @@ WebSocket `/api/v1/ws` sends a `snapshot` first, then events:
 `play_mode`, `playback_error`, `player_full`, `device_online`,
 `device_offline`, `devices_changed`, `players_changed`, `sources_changed`,
 `account`, `connection`. Send `{"type":"ping"}` to get a `pong`.
+
+Images: `image_url` values from the device (source logos, input icons) point
+at Denon's cloud. The service rewrites them to `/api/v1/images/{key}`, keeps the
+original as `image_url_remote`, downloads each image once into
+`<data dir>/cache/images/` and serves it from there (LRU, 100 MB cap). Only URLs
+the device returned can be fetched, so the endpoint is not an open proxy. The
+cache is safe to delete and does not need backing up.
 
 Errors are JSON `{"error":{"code","message",…}}`: 404 unknown id, 400 bad
 value, 503 amp not connected, 504 amp timeout, 502 HEOS `fail` (with `eid`),

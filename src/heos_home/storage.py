@@ -124,3 +124,8 @@ class Storage:
     @property
     def playlists_dir(self) -> Path:
         return self.data_dir / "playlists"
+
+    @property
+    def images_dir(self) -> Path:
+        """Downloaded device images; a cache, safe to delete and not needed in backups."""
+        return self.data_dir / "cache" / "images"

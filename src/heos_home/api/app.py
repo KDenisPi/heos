@@ -16,6 +16,7 @@ from ..heos.client import HeosClient
 from ..heos.protocol import HeosCommandError, HeosConnectionError, HeosTimeoutError
 from ..services.devices import DeviceService
 from ..services.events import EventBus
+from ..services.images import ImageCache, ImageError
 from ..services.players import PlayerService
 from ..services.power import PowerNotSupported
 from ..settings import Settings
@@ -32,6 +33,7 @@ class Services:
     client: HeosClient
     players: PlayerService
     devices: DeviceService
+    images: ImageCache
 
 
 def build_services(settings: Settings, client: HeosClient | None = None) -> Services:
@@ -40,7 +42,8 @@ def build_services(settings: Settings, client: HeosClient | None = None) -> Serv
     client = client or HeosClient(port=settings.heos_port)
     players = PlayerService(client, bus)
     devices = DeviceService(settings, storage, client, players, bus)
-    return Services(settings, storage, bus, client, players, devices)
+    images = ImageCache(storage.images_dir)
+    return Services(settings, storage, bus, client, players, devices, images)
 
 
 def create_app(settings: Settings | None = None, services: Services | None = None) -> FastAPI:
@@ -49,6 +52,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        await svc.images.start()
         await svc.client.start()
         await svc.devices.start()
         log.info("heos-home %s started, data dir %s", __version__, settings.data_dir)
@@ -57,6 +61,7 @@ def create_app(settings: Settings | None = None, services: Services | None = Non
         finally:
             await svc.devices.stop()
             await svc.client.stop()
+            await svc.images.stop()
 
     app = FastAPI(
         title="HEOS Home Controller",
@@ -103,6 +108,10 @@ def _install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(HeosCommandError)
     async def _heos_fail(_: Request, exc: HeosCommandError) -> JSONResponse:
         return _error(502, "heos_error", str(exc), eid=exc.eid, text=exc.text)
+
+    @app.exception_handler(ImageError)
+    async def _image(_: Request, exc: ImageError) -> JSONResponse:
+        return _error(502, "image_unavailable", str(exc))
 
     @app.exception_handler(PowerNotSupported)
     async def _no_power(_: Request, exc: PowerNotSupported) -> JSONResponse:

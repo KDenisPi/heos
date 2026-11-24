@@ -6,6 +6,7 @@ import hmac
 from typing import Any, Literal
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_validator
 
 from .. import __version__
@@ -220,7 +221,7 @@ async def play_mode(pid: int, body: PlayModeBody, svc: Services = Depends(servic
 @router.get("/players/{pid}/inputs", tags=["players"])
 async def inputs(pid: int, svc: Services = Depends(services)) -> dict[str, Any]:
     player = svc.players.get(pid)
-    return {"current": player.input, "inputs": await svc.players.inputs(pid)}
+    return {"current": player.input, "inputs": svc.images.localize_all(await svc.players.inputs(pid))}
 
 
 @router.put("/players/{pid}/input", tags=["players"], dependencies=write)
@@ -270,4 +271,16 @@ async def play_queue_item(pid: int, body: QueuePlayBody, svc: Services = Depends
 # ------------------------------------------------------------------ sources
 @router.get("/sources", tags=["sources"])
 async def sources(refresh: bool = False, svc: Services = Depends(services)) -> dict[str, Any]:
-    return {"sources": await svc.players.music_sources(refresh)}
+    return {"sources": svc.images.localize_all(await svc.players.music_sources(refresh))}
+
+
+# ------------------------------------------------------------------- images
+@router.get("/images/{key}", tags=["images"], response_class=FileResponse)
+async def image(key: str, svc: Services = Depends(services)) -> FileResponse:
+    """A device image (logo, icon, cover) served from the local cache."""
+    path = await svc.images.get(key)
+    return FileResponse(
+        path,
+        media_type=svc.images.media_type(key),
+        headers={"Cache-Control": "public, max-age=604800"},
+    )
