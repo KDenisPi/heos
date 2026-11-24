@@ -346,7 +346,7 @@ function PlaylistDetail({ id, onBack, onRenamed }: { id: string; onBack: () => v
         )}
       </Box>
 
-      {/* The same three actions as in the Library. */}
+      {/* The same three actions as on the Source screen. */}
       <Stack
         direction={{ xs: "column", md: "row" }}
         spacing={1.5}

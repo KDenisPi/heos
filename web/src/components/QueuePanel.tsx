@@ -197,7 +197,7 @@ export function QueuePanel({ pid }: { pid: number }) {
           </Box>
         ) : items.length === 0 ? (
           <Typography color="text.secondary" sx={{ px: 2, py: 3 }}>
-            The queue is empty. Add music from the Library.
+            The queue is empty. Add music from Source.
           </Typography>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>

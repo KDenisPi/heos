@@ -152,7 +152,7 @@ Navigation is folder-based, through the standard DLNA browse the HEOS CLI expose
 | F6.2 | Browse what the CLI exposes for Amazon: Playlists, Prime Stations, Charts, Recommended, New, My Music (Playlists, Artists, Albums, Tracks, Genres, Purchased). The root's upsell entry fails with "User account error" and is hidden. Search: not available (no criteria; `browse/search` answers eid 12) | M |
 | F6.3 | Play and queue Amazon items. Catalog albums, playlists and stations are single `station` items (`…/#chunk`): they play with `browse/play_stream` and replace what is playing; they cannot be queued. "My Music" albums are containers of tracks: tracks queue like DLNA tracks, and the album's cid queues the whole album in one command. If the amp ever rejects a container, its tracks are added one by one | M |
 | F6.4 | HEOS Favorites (sid 1028): list, play with `browse/play_preset`; the position is read fresh before playing, so reordering in another app is safe | S |
-| F6.5 | Generic source layer: the Library home lists HEOS Favorites, every available `music_service` and the DLNA servers; each item carries `play` = `queue` / `stream` / `favorite`, so adding a second service is configuration, not new code | M |
+| F6.5 | Generic source layer: the Source screen lists HEOS Favorites, every available `music_service` and the DLNA servers; each item carries `play` = `queue` / `stream` / `favorite`, so adding a second service is configuration, not new code | M |
 | F6.6 | Candidate lossless service for classical, not chosen yet. HEOS supports Qobuz natively and through Qobuz Connect (since 2025), plus TIDAL and Deezer | C |
 
 Amazon is only available through the HEOS device's own integration; the app never talks to Amazon directly. What the CLI offers for Amazon was measured on the PM7000N (F6.2, F6.3, R2).
@@ -309,13 +309,13 @@ The primary layout is tablet landscape (1920 x 1200 px, about 1280 x 800 dp at t
 
 | Pane | Width | Content |
 | --- | --- | --- |
-| Left rail | 80 dp | Device switcher (each device listed with its own power button and state), nav icons: Playing, Library, Playlists, Inputs, Devices, Settings |
-| Main | flexible | Current view. Playing: now playing (cover, title, transport, progress, volume) beside the queue on wide screens, above it on narrow ones. Others: browse (DLNA / Amazon / Favorites), playlist editor, inputs grid, devices, settings |
+| Left rail | 80 dp | Device switcher (each device listed with its own power button and state), nav icons: Playing, Source, Playlists, Inputs, Devices, Settings |
+| Main | flexible | Current view. Playing: now playing (cover, title, transport, progress, volume) beside the queue on wide screens, above it on narrow ones. Others: Source (DLNA / Amazon / Favorites), playlist editor, inputs grid, devices, settings |
 
 **Screens**
 
 1. **Playing** (nav item, start screen; now playing beside the queue): large cover art, transport, a seek bar that only displays progress (HEOS has no seek command), volume slider + mute, shuffle/repeat. The queue below supports drag to reorder, swipe to remove, a sort menu and "Save as playlist".
-2. **Library / Browse:** source tiles (each DLNA server, Amazon Music, HEOS Favorites), then a list of containers with a breadcrumb. Selecting never plays anything by itself: tapping a track selects it, tapping a folder opens it, and a folder's radio selects the folder. An action bar applies to the selected item, or to the whole open folder when nothing is selected: **Add and play**, **Replace queue and play**, **Add to end of queue** (later also Add to playlist…).
+2. **Source / Browse:** the list of media servers and streaming services (each DLNA server, Amazon Music, HEOS Favorites) and pinned folders, then a list of containers with a breadcrumb. Selecting never plays anything by itself: tapping a track selects it, tapping a folder opens it, and a folder's radio selects the folder. An action bar applies to the selected item, or to the whole open folder when nothing is selected: **Add and play**, **Replace queue and play**, **Add to end of queue** (later also Add to playlist…).
 3. **Search:** one box per source, results grouped by type (artist / album / track).
 4. **Playlists:** list of local playlists with item count and duration. Detail view supports inline editing, sort, load (replace/append), export.
 5. **Inputs:** a large-tile grid (Phono, CD, Line, Optical 1, Optical 2, Coax, Network). One tap switches input and powers on if the amp is in standby.
@@ -324,7 +324,7 @@ The primary layout is tablet landscape (1920 x 1200 px, about 1280 x 800 dp at t
 Power is always per device: there is no app-wide power button, since each HEOS device has its own power state.
 7. **Settings:** HEOS account sign-in, theme, default device, backup/restore of config and playlists, about/version.
 
-**Phone layout (phase 2):** single pane with bottom navigation (Now playing · Library · Playlists · Inputs), and a mini-player bar above it that expands to full now-playing.
+**Phone layout (phase 2):** single pane with bottom navigation (Now playing · Source · Playlists · Inputs), and a mini-player bar above it that expands to full now-playing.
 
 **Interaction rules**
 
@@ -379,6 +379,6 @@ Power control was the biggest unknown; it is now solved through the amp's UPnP A
 | --- | --- | --- |
 | 0. Spike (1 week) | Port probe, traffic capture, CLI test script for every command used; Amazon browse test; capture the native settings page URL | Power path investigated (not blocking); R1, R2, R7, Q1–Q3 answered |
 | 1. Core (2–3 weeks) | Server: discovery, CLI connection, events, player, inputs, power driver; tablet UI: now playing, queue, inputs | Daily use replaces the official app for playback control |
-| 2. Library (2 weeks) | DLNA browse/search, Amazon browse, add to queue modes, queue sort | Any track from DLNA or Amazon queued in < 4 taps |
+| 2. Source / library (2 weeks) | DLNA browse/search, Amazon browse, add to queue modes, queue sort | Any track from DLNA or Amazon queued in < 4 taps |
 | 3. Playlists (1–2 weeks) | Local playlists, edit, sort, import/export, re-match | Playlist survives a HEOS sign-out and a device reboot |
 | 4. Phone + extras | Responsive phone layout, PWA polish, device settings (F8), MCP / Home Assistant bridge | Usable on phone one-handed |

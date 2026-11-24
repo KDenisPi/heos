@@ -1,4 +1,4 @@
-// Library (F5): DLNA servers, pinned folders, folder browsing with breadcrumb,
+// Source (F5, F6): DLNA servers, streaming services (Amazon), HEOS Favorites, pinned folders, folder browsing with breadcrumb,
 // paging, a filter for the loaded folder, and play / queue actions.
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -116,7 +116,7 @@ function SourceIcon({ source }: { source: LibrarySource }) {
   );
 }
 
-function LibraryHome({ onOpen }: { onOpen: (loc: Location) => void }) {
+function SourceHome({ onOpen }: { onOpen: (loc: Location) => void }) {
   const act = useAction();
   const heosConnected = useAppState((s) => s.heos.connected);
   const [sources, setSources] = useState<LibrarySource[] | null>(null);
@@ -145,10 +145,10 @@ function LibraryHome({ onOpen }: { onOpen: (loc: Location) => void }) {
 
   return (
     <Stack spacing={3} sx={{ p: 3 }}>
-      <Typography variant="h5">Library</Typography>
+      <Typography variant="h5">Source</Typography>
 
       <Box>
-        <Typography variant="subtitle1" gutterBottom>Sources</Typography>
+        <Typography variant="subtitle1" gutterBottom>Media servers and services</Typography>
         {sources === null ? (
           heosConnected ? <CircularProgress size={28} /> : <Typography color="text.secondary">Not connected</Typography>
         ) : sources.length === 0 ? (
@@ -431,7 +431,7 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
             <ArrowBackIcon />
           </IconButton>
           <Breadcrumbs maxItems={5} itemsAfterCollapse={2} sx={{ flex: 1, minWidth: 0 }}>
-            <Link component="button" underline="hover" color="inherit" onClick={onHome}>Library</Link>
+            <Link component="button" underline="hover" color="inherit" onClick={onHome}>Source</Link>
             {loc.path.length > 0 ? (
               <Link component="button" underline="hover" color="inherit" onClick={() => onNavigate([])}>{loc.server}</Link>
             ) : (
@@ -517,8 +517,8 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
   );
 }
 
-export function LibraryView() {
+export function SourceView() {
   const [loc, setLoc] = useState<Location | null>(null);
-  if (!loc) return <LibraryHome onOpen={setLoc} />;
+  if (!loc) return <SourceHome onOpen={setLoc} />;
   return <Browser loc={loc} onNavigate={(path) => setLoc({ ...loc, path })} onHome={() => setLoc(null)} />;
 }

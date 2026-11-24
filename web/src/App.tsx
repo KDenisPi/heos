@@ -13,7 +13,7 @@ import { store, useAppState } from "./state/store";
 import { makeTheme } from "./theme";
 import { DevicesView } from "./views/DevicesView";
 import { InputsView } from "./views/InputsView";
-import { LibraryView } from "./views/LibraryView";
+import { SourceView } from "./views/SourceView";
 import { PlaylistsView } from "./views/PlaylistsView";
 import { SettingsView } from "./views/SettingsView";
 
@@ -61,8 +61,8 @@ function MainView({ view, wide }: { view: View; wide: boolean }) {
       return <DevicesView />;
     case "settings":
       return <SettingsView />;
-    case "library":
-      return <LibraryView />;
+    case "source":
+      return <SourceView />;
     case "playlists":
       return <PlaylistsView />;
   }

@@ -10,11 +10,11 @@ import { selectPid, useSelectedDevice } from "../hooks/useSelectedPlayer";
 import { useAppState } from "../state/store";
 import { PowerButton } from "./PowerButton";
 
-export type View = "now" | "library" | "playlists" | "inputs" | "devices" | "settings";
+export type View = "now" | "source" | "playlists" | "inputs" | "devices" | "settings";
 
 const ITEMS: { view: View; label: string; icon: React.ReactNode }[] = [
   { view: "now", label: "Playing", icon: <PlayCircleIcon /> },
-  { view: "library", label: "Library", icon: <LibraryMusicIcon /> },
+  { view: "source", label: "Source", icon: <LibraryMusicIcon /> },
   { view: "playlists", label: "Playlists", icon: <QueueMusicIcon /> },
   { view: "inputs", label: "Inputs", icon: <InputIcon /> },
   { view: "devices", label: "Devices", icon: <SpeakerIcon /> },
