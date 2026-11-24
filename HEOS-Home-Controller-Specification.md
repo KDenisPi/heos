@@ -308,7 +308,7 @@ The primary layout is tablet landscape (1920 x 1200 px, about 1280 x 800 dp at t
 **Screens**
 
 1. **Playing** (nav item, start screen; now playing beside the queue): large cover art, transport, a seek bar that only displays progress (HEOS has no seek command), volume slider + mute, shuffle/repeat. The queue below supports drag to reorder, swipe to remove, a sort menu and "Save as playlist".
-2. **Library / Browse:** source tiles (each DLNA server, Amazon Music, HEOS Favorites), then a grid or list of containers with a breadcrumb. Long-press or a ⋮ menu on any item: Play now, Play next, Add to queue, Replace queue, Add to playlist…
+2. **Library / Browse:** source tiles (each DLNA server, Amazon Music, HEOS Favorites), then a list of containers with a breadcrumb. Selecting never plays anything by itself: tapping a track selects it, tapping a folder opens it, and a folder's radio selects the folder. An action bar applies to the selected item, or to the whole open folder when nothing is selected: **Add and play**, **Replace queue and play**, **Add to end of queue** (later also Add to playlist…).
 3. **Search:** one box per source, results grouped by type (artist / album / track).
 4. **Playlists:** list of local playlists with item count and duration. Detail view supports inline editing, sort, load (replace/append), export.
 5. **Inputs:** a large-tile grid (Phono, CD, Line, Optical 1, Optical 2, Coax, Network). One tap switches input and powers on if the amp is in standby.

@@ -84,6 +84,7 @@ class LibraryService:
             "mid": item.get("mid"),
             "artist": item.get("artist") or "",
             "album": item.get("album") or "",
+            "album_id": item.get("album_id"),
             "image_url": item.get("image_url") or item.get("image_uri") or "",
         }
         return self.images.localize(out)

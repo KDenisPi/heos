@@ -2,15 +2,15 @@
 // paging, a filter for the loaded folder, and play / queue actions.
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import DnsIcon from "@mui/icons-material/Dns";
 import FolderIcon from "@mui/icons-material/Folder";
 import HistoryIcon from "@mui/icons-material/History";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
+import LibraryMusicIcon from "@mui/icons-material/LibraryMusic";
 import MusicNoteIcon from "@mui/icons-material/MusicNote";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PlaylistAddIcon from "@mui/icons-material/PlaylistAdd";
-import PlaylistPlayIcon from "@mui/icons-material/PlaylistPlay";
 import PushPinIcon from "@mui/icons-material/PushPin";
 import PushPinOutlinedIcon from "@mui/icons-material/PushPinOutlined";
 import QueueMusicIcon from "@mui/icons-material/QueueMusic";
@@ -31,8 +31,7 @@ import {
   ListItemAvatar,
   ListItemButton,
   ListItemText,
-  Menu,
-  MenuItem,
+  Radio,
   Stack,
   TextField,
   Tooltip,
@@ -54,10 +53,10 @@ interface Location {
 }
 
 const MODE_LABEL: Record<AddMode, string> = {
-  now: "Playing now",
+  now: "Added and playing",
   next: "Plays next",
-  end: "Added to queue",
-  replace: "Queue replaced",
+  end: "Added to end of queue",
+  replace: "Queue replaced, playing",
 };
 
 /** Queue items from the library with a mode; reports the result in the snackbar. */
@@ -74,8 +73,10 @@ function useEnqueue() {
 }
 
 function queueItemFor(item: LibraryItem, folderCid: string | null): QueueAddItem {
-  // A track is queued with its folder's cid plus its mid; a container with its own cid.
-  return item.container ? { sid: item.sid, cid: item.cid } : { sid: item.sid, cid: folderCid, mid: item.mid };
+  // A track is queued with its container's cid plus its mid; a folder with its own cid.
+  return item.container
+    ? { sid: item.sid, cid: item.cid }
+    : { sid: item.sid, cid: item.album_id ?? folderCid, mid: item.mid };
 }
 
 // ------------------------------------------------------------------- home
@@ -178,46 +179,37 @@ function LibraryHome({ onOpen }: { onOpen: (loc: Location) => void }) {
 }
 
 // ---------------------------------------------------------------- browser
-function ItemMenu({
-  anchor,
-  onClose,
-  onAdd,
-}: {
-  anchor: HTMLElement | null;
-  onClose: () => void;
-  onAdd: (mode: AddMode) => void;
-}) {
-  const choose = (mode: AddMode) => {
-    onClose();
-    onAdd(mode);
-  };
-  return (
-    <Menu anchorEl={anchor} open={anchor !== null} onClose={onClose}>
-      <MenuItem onClick={() => choose("now")}><PlayArrowIcon fontSize="small" sx={{ mr: 1.5 }} /> Play now</MenuItem>
-      <MenuItem onClick={() => choose("next")}><PlaylistPlayIcon fontSize="small" sx={{ mr: 1.5 }} /> Play next</MenuItem>
-      <MenuItem onClick={() => choose("end")}><PlaylistAddIcon fontSize="small" sx={{ mr: 1.5 }} /> Add to queue</MenuItem>
-      <MenuItem onClick={() => choose("replace")}><QueueMusicIcon fontSize="small" sx={{ mr: 1.5 }} /> Replace queue</MenuItem>
-      <MenuItem disabled>Add to playlist… (phase 3)</MenuItem>
-    </Menu>
-  );
+type Target = { kind: "item"; item: LibraryItem } | { kind: "folder"; name: string; total: number | null } | null;
+
+function itemKey(item: LibraryItem): string {
+  return `${item.cid ?? ""}|${item.mid ?? ""}`;
 }
 
-function ItemRow({ item, folderCid, onOpen }: { item: LibraryItem; folderCid: string | null; onOpen: () => void }) {
-  const enqueue = useEnqueue();
-  const [menu, setMenu] = useState<HTMLElement | null>(null);
+/**
+ * One row. Tapping a track selects it; tapping a folder opens it, and its
+ * radio selects the folder itself. Nothing is queued until an action is chosen.
+ */
+function ItemRow({
+  item,
+  selected,
+  onSelect,
+  onOpen,
+}: {
+  item: LibraryItem;
+  selected: boolean;
+  onSelect: () => void;
+  onOpen: () => void;
+}) {
   const secondary = [item.artist, item.album].filter(Boolean).join(" · ");
-  // Containers open; tracks play now. Everything else is in the ⋮ menu.
-  const onClick = item.container ? onOpen : () => enqueue([queueItemFor(item, folderCid)], "now");
   return (
-    <ListItem
-      disablePadding
-      secondaryAction={
-        <IconButton edge="end" aria-label={`Actions for ${item.name}`} onClick={(e) => setMenu(e.currentTarget)}>
-          <MoreVertIcon />
-        </IconButton>
-      }
-    >
-      <ListItemButton onClick={onClick} sx={{ pr: 7 }}>
+    <ListItem disablePadding>
+      <Radio
+        checked={selected}
+        onClick={onSelect}
+        slotProps={{ input: { "aria-label": `Select ${item.name}` } }}
+        sx={{ ml: 0.5 }}
+      />
+      <ListItemButton selected={selected} onClick={item.container ? onOpen : onSelect} sx={{ borderRadius: 3 }}>
         <ListItemAvatar>
           {item.image_url ? (
             <Avatar variant="rounded" src={item.image_url} alt="" slotProps={{ img: { loading: "lazy" } }} />
@@ -228,9 +220,50 @@ function ItemRow({ item, folderCid, onOpen }: { item: LibraryItem; folderCid: st
           )}
         </ListItemAvatar>
         <ListItemText primary={item.name} secondary={secondary || undefined} slotProps={{ primary: { noWrap: true }, secondary: { noWrap: true } }} />
+        {item.container && <ChevronRightIcon sx={{ color: "text.disabled" }} />}
       </ListItemButton>
-      <ItemMenu anchor={menu} onClose={() => setMenu(null)} onAdd={(mode) => enqueue([queueItemFor(item, folderCid)], mode)} />
     </ListItem>
+  );
+}
+
+/** What the actions apply to, and the three ways to add it to the queue. */
+function ActionBar({ target, onAdd, onClear }: { target: Target; onAdd: (mode: AddMode) => void; onClear: () => void }) {
+  const label =
+    target === null
+      ? "Select a track or folder"
+      : target.kind === "item"
+        ? target.item.name
+        : `Whole folder: ${target.name}${target.total !== null ? ` · ${target.total} items` : ""}`;
+  const disabled = target === null;
+  return (
+    <Stack
+      direction={{ xs: "column", md: "row" }}
+      spacing={1.5}
+      sx={{ p: 1.5, px: 2, borderTop: 1, borderColor: "divider", bgcolor: "background.paper", alignItems: { md: "center" } }}
+    >
+      <Stack direction="row" spacing={1} sx={{ flex: 1, minWidth: 0, alignItems: "center" }}>
+        {target?.kind === "item" ? (
+          target.item.container ? <FolderIcon color="primary" /> : <MusicNoteIcon color="primary" />
+        ) : (
+          <LibraryMusicIcon color={disabled ? "disabled" : "primary"} />
+        )}
+        <Typography noWrap color={disabled ? "text.secondary" : "text.primary"} title={label}>{label}</Typography>
+        {target?.kind === "item" && (
+          <Button size="small" onClick={onClear} sx={{ flexShrink: 0 }}>Clear</Button>
+        )}
+      </Stack>
+      <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
+        <Button variant="contained" startIcon={<PlayArrowIcon />} disabled={disabled} onClick={() => onAdd("now")}>
+          Add and play
+        </Button>
+        <Button variant="outlined" startIcon={<QueueMusicIcon />} disabled={disabled} onClick={() => onAdd("replace")}>
+          Replace queue and play
+        </Button>
+        <Button variant="outlined" startIcon={<PlaylistAddIcon />} disabled={disabled} onClick={() => onAdd("end")}>
+          Add to end of queue
+        </Button>
+      </Stack>
+    </Stack>
   );
 }
 
@@ -247,6 +280,7 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
   const [results, setResults] = useState<LibraryItem[] | null>(null);
   const [searchUnsupported, setSearchUnsupported] = useState(false);
   const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
+  const [selected, setSelected] = useState<LibraryItem | null>(null);
   const sentinel = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef(false);
 
@@ -272,6 +306,7 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
     setTotal(null);
     setFilter("");
     setResults(null);
+    setSelected(null);
     loadPage(0);
     if (loc.path.length) api.setLastFolder(loc.sid, loc.path).catch(() => undefined);
   }, [loadPage, loc.sid, loc.path]);
@@ -320,6 +355,12 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
   }, [items, filter, results]);
 
   const folderName = loc.path.length ? loc.path[loc.path.length - 1].name : loc.server;
+  // With nothing selected, the actions apply to the whole folder, if the amp says it can be queued.
+  const target: Target = selected
+    ? { kind: "item", item: selected }
+    : playable && cid
+      ? { kind: "folder", name: folderName, total }
+      : null;
 
   return (
     <Stack sx={{ height: "100%", minHeight: 0 }}>
@@ -371,16 +412,6 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
             sx={{ flex: 1, maxWidth: 480 }}
             slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
           />
-          {playable && cid && (
-            <Stack direction="row" spacing={1}>
-              <Button variant="contained" startIcon={<PlayArrowIcon />} onClick={() => enqueue([{ sid: loc.sid, cid }], "replace")}>
-                Play all
-              </Button>
-              <Button variant="outlined" startIcon={<PlaylistAddIcon />} onClick={() => enqueue([{ sid: loc.sid, cid }], "end")}>
-                Add all
-              </Button>
-            </Stack>
-          )}
         </Stack>
         <Typography variant="caption" color="text.secondary">
           {results
@@ -397,9 +428,10 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
         <List dense disablePadding>
           {shown.map((item, i) => (
             <ItemRow
-              key={`${item.cid ?? ""}|${item.mid ?? ""}|${i}`}
+              key={`${itemKey(item)}|${i}`}
               item={item}
-              folderCid={cid}
+              selected={selected !== null && itemKey(selected) === itemKey(item)}
+              onSelect={() => setSelected((cur) => (cur && itemKey(cur) === itemKey(item) ? null : item))}
               onOpen={() => item.cid && onNavigate([...loc.path, { cid: item.cid, name: item.name }])}
             />
           ))}
@@ -411,6 +443,14 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
           )}
         </Box>
       </Box>
+      <ActionBar
+        target={target}
+        onClear={() => setSelected(null)}
+        onAdd={(mode) => {
+          if (selected) enqueue([queueItemFor(selected, cid)], mode);
+          else if (playable && cid) enqueue([{ sid: loc.sid, cid }], mode);
+        }}
+      />
     </Stack>
   );
 }

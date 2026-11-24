@@ -68,7 +68,7 @@ class HeosClient:
         self._connected = False
         self._stopping = False
         self._wake = asyncio.Event()
-        self._events: asyncio.Queue[HeosMessage] = asyncio.Queue()
+        self._events: asyncio.Queue[HeosMessage | None] = asyncio.Queue()  # None = stop
         self._tasks: list[asyncio.Task[Any]] = []
         self._connected_event = asyncio.Event()
         self.last_error: str | None = None
@@ -86,20 +86,27 @@ class HeosClient:
 
     async def start(self) -> None:
         self._stopping = False
+        self._events = asyncio.Queue()
         self._tasks = [
             asyncio.create_task(self._run(), name="heos-connection"),
             asyncio.create_task(self._dispatch_events(), name="heos-events"),
         ]
 
     async def stop(self) -> None:
+        # A cancel can be lost: if it lands while a command fails with
+        # "connection lost", wait_for raises that error instead of
+        # CancelledError. So the loops also stop on a flag, and the event
+        # dispatcher is woken with a None marker.
         self._stopping = True
         self._wake.set()
+        self._events.put_nowait(None)
         await self._close_socket()
         for task in self._tasks:
             task.cancel()
-        for task in self._tasks:
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await task
+        if self._tasks:
+            _, pending = await asyncio.wait(self._tasks, timeout=3)
+            for task in pending:
+                log.warning("task %s did not stop in time", task.get_name())
         self._tasks = []
 
     async def set_host(self, host: str | None) -> None:
@@ -285,8 +292,10 @@ class HeosClient:
                 pass  # the device answered, so the socket is alive
 
     async def _dispatch_events(self) -> None:
-        while True:
+        while not self._stopping:
             message = await self._events.get()
+            if message is None or self._stopping:
+                break
             for listener in list(self._event_listeners):
                 try:
                     await listener(message)

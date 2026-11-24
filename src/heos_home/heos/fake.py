@@ -484,7 +484,7 @@ class FakeHeosServer:
             raise _SystemError
         needle, scid = p["search"].casefold(), int(p.get("scid", 3))
         field = {1: "artist", 2: "album", 3: "name"}[scid]
-        songs = [it for items in LIBRARY.values() for it in items if it.get("type") == "song"]
+        songs = [dict(it, album_id=cid) for cid, items in LIBRARY.items() for it in items if it.get("type") == "song"]
         hits = [{k: v for k, v in it.items() if k != "duration"} for it in songs if needle in it[field].casefold()]
         start, end = 0, len(hits) - 1
         if "range" in p:

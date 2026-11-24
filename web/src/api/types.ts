@@ -90,6 +90,8 @@ export interface LibraryItem {
   mid: string | null;
   artist: string;
   album: string;
+  /** For tracks: the container they belong to (used to queue them, e.g. from search results). */
+  album_id?: string | null;
   image_url: string;
 }
 

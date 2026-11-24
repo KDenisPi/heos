@@ -9,7 +9,7 @@ async def test_servers(app_env):
     _, _, http = app_env
     servers = (await http.get("/library/servers")).json()["servers"]
     assert servers == [{"sid": DLNA, "name": "Fake NAS", "type": "dlna_server", "container": True, "playable": False,
-                        "cid": None, "mid": None, "artist": "", "album": "", "image_url": ""}]
+                        "cid": None, "mid": None, "artist": "", "album": "", "album_id": None, "image_url": ""}]
 
 
 async def test_browse_root_and_folder_tree(app_env):
@@ -127,3 +127,30 @@ async def test_last_folder_persists(app_env, settings):
     assert (await http.get(f"/library/last-folder/{DLNA}")).json()["path"] == path
     saved = json.loads((settings.data_dir / "state.json").read_text())
     assert saved["last_folder"][str(DLNA)][1]["name"] == "classic"
+
+
+async def test_tracks_carry_their_container_for_queueing(app_env):
+    """A track's album_id lets the UI queue it from search results, not only from its folder."""
+    _, _, http = app_env
+    res = (await http.get(f"/sources/{DLNA}/search", params={"q": "freddie", "criteria": 3})).json()
+    track = res["items"][0]
+    assert track["album_id"] == "64$1$4"
+    r = await http.post(f"/players/{PID}/queue",
+                        json={"items": [{"sid": DLNA, "cid": track["album_id"], "mid": track["mid"]}], "mode": "end"})
+    assert r.status_code == 200
+    assert (await http.get(f"/players/{PID}/queue")).json()["items"][-1]["song"] == "Freddie Freeloader"
+
+
+async def test_three_add_modes(app_env, fake):
+    """The library offers: add and play (now), replace queue and play, add to end."""
+    _, svc, http = app_env
+    folder = {"sid": DLNA, "cid": "64$1$3"}  # 3 tracks
+    await http.post(f"/players/{PID}/queue", json={"items": [{"sid": DLNA, "cid": "64$1$4"}], "mode": "replace"})
+    assert fake.players[PID].current == 0
+    await http.post(f"/players/{PID}/queue", json={"items": [folder], "mode": "end"})
+    q = fake.players[PID].queue
+    assert len(q) == 6 and q[-1]["song"].endswith("III. Aria") and fake.players[PID].current == 0
+    await http.post(f"/players/{PID}/queue", json={"items": [{"sid": DLNA, "cid": "64$1$3", "mid": "64$1$3$2"}], "mode": "now"})
+    assert fake.players[PID].queue[fake.players[PID].current]["song"].endswith("II. Recitative")
+    await http.post(f"/players/{PID}/queue", json={"items": [folder], "mode": "replace"})
+    assert [i["song"][-9:] for i in fake.players[PID].queue] == ["I. Chorus", "ecitative", "III. Aria"]
