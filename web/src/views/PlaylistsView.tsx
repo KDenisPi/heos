@@ -12,8 +12,6 @@ import DownloadIcon from "@mui/icons-material/Download";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import EditIcon from "@mui/icons-material/Edit";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import PlaylistAddIcon from "@mui/icons-material/PlaylistAdd";
 import QueueMusicIcon from "@mui/icons-material/QueueMusic";
 import ShuffleIcon from "@mui/icons-material/Shuffle";
 import SortByAlphaIcon from "@mui/icons-material/SortByAlpha";
@@ -49,6 +47,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../api/client";
 import type { AddMode, Playlist, PlaylistEntry, PlaylistSummary, SortKey } from "../api/types";
+import { QueueActions } from "../components/ActionButton";
+import { useDeviceClass } from "../hooks/useDeviceClass";
 import { useSelectedPid } from "../hooks/useSelectedPlayer";
 import { useAction, useNotify } from "../notify";
 import { useAppState } from "../state/store";
@@ -186,6 +186,7 @@ function PlaylistDetail({ id, onBack, onRenamed }: { id: string; onBack: () => v
   const [renameError, setRenameError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { phone: compact } = useDeviceClass();
 
   const reload = useCallback(() => act(() => api.playlist(id)).then((p) => p && setPlaylist(p)), [act, id]);
   useEffect(() => {
@@ -346,26 +347,16 @@ function PlaylistDetail({ id, onBack, onRenamed }: { id: string; onBack: () => v
         )}
       </Box>
 
-      {/* The same three actions as on the Source screen. */}
+      {/* The same three actions as on the Source screen (icons with tooltips on phones). */}
       <Stack
-        direction={{ xs: "column", md: "row" }}
-        spacing={1.5}
-        sx={{ p: 1.5, px: 2, borderTop: 1, borderColor: "divider", bgcolor: "background.paper", alignItems: { md: "center" } }}
+        direction={compact ? "row" : { xs: "column", md: "row" }}
+        spacing={compact ? 1 : 1.5}
+        sx={{ p: compact ? 1 : 1.5, px: 2, borderTop: 1, borderColor: "divider", bgcolor: "background.paper", alignItems: compact ? "center" : { md: "center" } }}
       >
-        <Typography color="text.secondary" sx={{ flex: 1 }} noWrap>
-          {loading ? "Loading into the queue…" : `Whole playlist · ${playable} playable tracks`}
+        <Typography color="text.secondary" variant={compact ? "body2" : "body1"} sx={{ flex: 1, minWidth: 0 }} noWrap>
+          {loading ? "Loading into the queue…" : compact ? `${playable} tracks` : `Whole playlist · ${playable} playable tracks`}
         </Typography>
-        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
-          <Button variant="contained" startIcon={<PlayArrowIcon />} disabled={!playable || loading} onClick={() => load("now")}>
-            Add and play
-          </Button>
-          <Button variant="outlined" startIcon={<QueueMusicIcon />} disabled={!playable || loading} onClick={() => load("replace")}>
-            Replace queue and play
-          </Button>
-          <Button variant="outlined" startIcon={<PlaylistAddIcon />} disabled={!playable || loading} onClick={() => load("end")}>
-            Add to end of queue
-          </Button>
-        </Stack>
+        <QueueActions compact={compact} disabled={!playable || loading} onAdd={load} />
       </Stack>
 
       <Dialog open={renaming} onClose={() => setRenaming(false)} fullWidth maxWidth="xs">

@@ -2,6 +2,7 @@
 // paging, a filter for the loaded folder, and play / queue actions.
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import CloseIcon from "@mui/icons-material/Close";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import CloudIcon from "@mui/icons-material/Cloud";
@@ -11,10 +12,8 @@ import HistoryIcon from "@mui/icons-material/History";
 import LibraryMusicIcon from "@mui/icons-material/LibraryMusic";
 import MusicNoteIcon from "@mui/icons-material/MusicNote";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import PlaylistAddIcon from "@mui/icons-material/PlaylistAdd";
 import PushPinIcon from "@mui/icons-material/PushPin";
 import PushPinOutlinedIcon from "@mui/icons-material/PushPinOutlined";
-import QueueMusicIcon from "@mui/icons-material/QueueMusic";
 import RadioIcon from "@mui/icons-material/Radio";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import StarIcon from "@mui/icons-material/Star";
@@ -44,6 +43,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "../api/client";
 import type { AddMode, LibraryItem, LibrarySource, PathStep, QueueAddItem, Shortcut } from "../api/types";
+import { ActionButton, QueueActions } from "../components/ActionButton";
+import { useDeviceClass } from "../hooks/useDeviceClass";
 import { useFavorites } from "../hooks/useFavorites";
 import { useSelectedPid } from "../hooks/useSelectedPlayer";
 import { useAction, useNotify } from "../notify";
@@ -283,19 +284,27 @@ function ActionBar({
   onToggleFavorite: () => void;
   onClear: () => void;
 }) {
+  // Phones: one row with icon buttons (labels as tooltips); tablets: labelled buttons.
+  const { phone: compact } = useDeviceClass();
   const stream = target?.kind === "item" && target.item.play !== "queue";
   const label =
     target === null
       ? "Select a track or folder"
       : target.kind === "item"
         ? target.item.name
-        : `Whole folder: ${target.name}${target.total !== null ? ` · ${target.total} items` : ""}`;
+        : compact
+          ? `${target.name}${target.total !== null ? ` · ${target.total}` : ""}`
+          : `Whole folder: ${target.name}${target.total !== null ? ` · ${target.total} items` : ""}`;
   const disabled = target === null;
+  const streamNote =
+    target?.kind === "item" && target.item.play === "favorite"
+      ? "HEOS Favorite: replaces what is playing, not added to the queue"
+      : "Plays as a stream: replaces what is playing, not added to the queue";
   return (
     <Stack
-      direction={{ xs: "column", md: "row" }}
-      spacing={1.5}
-      sx={{ p: 1.5, px: 2, borderTop: 1, borderColor: "divider", bgcolor: "background.paper", alignItems: { md: "center" } }}
+      direction={compact ? "row" : { xs: "column", md: "row" }}
+      spacing={compact ? 1 : 1.5}
+      sx={{ p: compact ? 1 : 1.5, px: compact ? 1.5 : 2, borderTop: 1, borderColor: "divider", bgcolor: "background.paper", alignItems: compact ? "center" : { md: "center" } }}
     >
       <Stack direction="row" spacing={1} sx={{ flex: 1, minWidth: 0, alignItems: "center" }}>
         {target?.kind === "item" ? (
@@ -303,39 +312,35 @@ function ActionBar({
         ) : (
           <LibraryMusicIcon color={disabled ? "disabled" : "primary"} />
         )}
-        <Typography noWrap color={disabled ? "text.secondary" : "text.primary"} title={label}>{label}</Typography>
-        {target?.kind === "item" && (
-          <Button size="small" onClick={onClear} sx={{ flexShrink: 0 }}>Clear</Button>
-        )}
+        <Typography noWrap variant={compact ? "body2" : "body1"} color={disabled ? "text.secondary" : "text.primary"} title={label}>
+          {label}
+        </Typography>
+        {target?.kind === "item" &&
+          (compact ? (
+            <IconButton size="small" aria-label="Clear selection" onClick={onClear} sx={{ flexShrink: 0, minWidth: 32, minHeight: 32 }}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          ) : (
+            <Button size="small" onClick={onClear} sx={{ flexShrink: 0 }}>Clear</Button>
+          ))}
       </Stack>
       {stream ? (
-        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
-          <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 260 }}>
-            {target.item.play === "favorite" ? "HEOS Favorite" : "Plays as a stream"}: replaces what is playing, not added to the queue
-          </Typography>
-          {target.item.can_favorite && (
-            <Button
-              variant="outlined"
-              startIcon={isFavorite ? <StarIcon /> : <StarBorderIcon />}
-              onClick={onToggleFavorite}
-            >
-              {isFavorite ? "Remove from Favorites" : "Add to Favorites"}
-            </Button>
+        <Stack direction="row" spacing={compact ? 1 : 1.5} sx={{ alignItems: "center", flexShrink: 0 }}>
+          {!compact && (
+            <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 260 }}>{streamNote}</Typography>
           )}
-          <Button variant="contained" startIcon={<PlayArrowIcon />} onClick={onPlay}>Play</Button>
+          {target.item.can_favorite && (
+            <ActionButton
+              compact={compact}
+              icon={isFavorite ? <StarIcon /> : <StarBorderIcon />}
+              label={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+              onClick={onToggleFavorite}
+            />
+          )}
+          <ActionButton compact={compact} primary icon={<PlayArrowIcon />} label={compact ? `Play (${streamNote.split(":")[1].trim()})` : "Play"} onClick={onPlay} />
         </Stack>
       ) : (
-      <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
-        <Button variant="contained" startIcon={<PlayArrowIcon />} disabled={disabled} onClick={() => onAdd("now")}>
-          Add and play
-        </Button>
-        <Button variant="outlined" startIcon={<QueueMusicIcon />} disabled={disabled} onClick={() => onAdd("replace")}>
-          Replace queue and play
-        </Button>
-        <Button variant="outlined" startIcon={<PlaylistAddIcon />} disabled={disabled} onClick={() => onAdd("end")}>
-          Add to end of queue
-        </Button>
-      </Stack>
+        <QueueActions compact={compact} disabled={disabled} onAdd={onAdd} />
       )}
     </Stack>
   );
