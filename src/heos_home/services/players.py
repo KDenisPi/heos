@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -416,30 +417,73 @@ class PlayerService:
             finally:
                 self.bus.publish("queue_changed", pid)
 
-    async def add_to_queue(self, pid: int, items: list[dict[str, Any]], mode: str) -> None:
-        """Add browse/search items to the queue (F3.6).
+    async def play_stream(self, pid: int, sid: int, mid: str, name: str, cid: str | None = None) -> None:
+        """Play a station-like item (Amazon album/playlist/station). Replaces what is playing."""
+        self.get(pid)
+        await self.client.command(
+            "browse/play_stream", {"pid": pid, "sid": sid, "cid": cid, "mid": mid, "name": name}, timeout=30
+        )
 
-        Several items keep their order: "next" adds them in reverse with
-        "play next"; "now" and "replace" start with the first item and put the
-        rest after it.
+    async def play_preset(self, pid: int, preset: int) -> None:
+        """Play a HEOS Favorite by its 1-based position (F6.4)."""
+        self.get(pid)
+        await self.client.command("browse/play_preset", {"pid": pid, "preset": preset}, timeout=30)
+
+    @staticmethod
+    def _add_plan(items: list[dict[str, Any]], mode: str) -> list[tuple[dict[str, Any], int]]:
+        """(item, aid) pairs that add ``items`` in order with the given mode.
+
+        "next" adds them in reverse with "play next"; "now" and "replace" start
+        with the first item and put the rest after it.
+        """
+        if not items:
+            return []
+        first, rest = items[0], items[1:]
+        if mode == "end":
+            return [(item, 3) for item in items]
+        if mode == "next":
+            return [(item, 2) for item in reversed(items)]
+        if mode == "now":
+            return [(first, 1)] + [(item, 2) for item in reversed(rest)]
+        return [(first, 4)] + [(item, 3) for item in rest]  # replace
+
+    async def add_to_queue(
+        self,
+        pid: int,
+        items: list[dict[str, Any]],
+        mode: str,
+        expand: Callable[[dict[str, Any]], Awaitable[list[dict[str, Any]]]] | None = None,
+    ) -> int:
+        """Add browse/search items to the queue (F3.6); returns how many items were added.
+
+        A whole container is tried first (one command). If the amp rejects it
+        and ``expand`` is given, the container's tracks are added one by one
+        instead, keeping their order for that mode. (With several items and
+        mode "now", a fallback container's tracks may interleave; the UI sends
+        one item at a time.)
         """
         self.get(pid)
         if mode not in ADD_MODES:
             raise ValueError(f"mode must be one of {sorted(ADD_MODES)}")
-        if not items:
-            return
-        first, rest = items[0], items[1:]
-        if mode == "end":
-            plan = [(item, 3) for item in items]
-        elif mode == "next":
-            plan = [(item, 2) for item in reversed(items)]
-        elif mode == "now":
-            plan = [(first, 1)] + [(item, 2) for item in reversed(rest)]
-        else:  # replace
-            plan = [(first, 4)] + [(item, 3) for item in rest]
-        for item, aid in plan:
-            await self.client.command(
-                "browse/add_to_queue",
-                {"pid": pid, "sid": item["sid"], "cid": item.get("cid"), "mid": item.get("mid"), "aid": aid},
-                timeout=30,
-            )
+        mode_of_aid = {1: "now", 2: "next", 3: "end", 4: "replace"}
+        added = 0
+        for item, aid in self._add_plan(items, mode):
+            try:
+                await self._add_one(pid, item, aid)
+                added += 1
+            except HeosCommandError as err:
+                if expand is None or item.get("mid") or not item.get("cid"):
+                    raise
+                log.info("container %s not accepted whole (%s); adding its tracks", item.get("cid"), err)
+                tracks = await expand(item)
+                for track, track_aid in self._add_plan(tracks, mode_of_aid[aid]):
+                    await self._add_one(pid, track, track_aid)
+                added += len(tracks)
+        return added
+
+    async def _add_one(self, pid: int, item: dict[str, Any], aid: int) -> None:
+        await self.client.command(
+            "browse/add_to_queue",
+            {"pid": pid, "sid": item["sid"], "cid": item.get("cid"), "mid": item.get("mid"), "aid": aid},
+            timeout=30,
+        )

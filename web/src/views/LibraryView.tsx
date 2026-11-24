@@ -4,6 +4,7 @@
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
+import CloudIcon from "@mui/icons-material/Cloud";
 import DnsIcon from "@mui/icons-material/Dns";
 import FolderIcon from "@mui/icons-material/Folder";
 import HistoryIcon from "@mui/icons-material/History";
@@ -14,7 +15,9 @@ import PlaylistAddIcon from "@mui/icons-material/PlaylistAdd";
 import PushPinIcon from "@mui/icons-material/PushPin";
 import PushPinOutlinedIcon from "@mui/icons-material/PushPinOutlined";
 import QueueMusicIcon from "@mui/icons-material/QueueMusic";
+import RadioIcon from "@mui/icons-material/Radio";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import StarIcon from "@mui/icons-material/Star";
 import SearchIcon from "@mui/icons-material/Search";
 import {
   Avatar,
@@ -39,7 +42,7 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "../api/client";
-import type { AddMode, LibraryItem, PathStep, QueueAddItem, Shortcut } from "../api/types";
+import type { AddMode, LibraryItem, LibrarySource, PathStep, QueueAddItem, Shortcut } from "../api/types";
 import { useSelectedPid } from "../hooks/useSelectedPlayer";
 import { useAction, useNotify } from "../notify";
 import { useAppState } from "../state/store";
@@ -72,35 +75,68 @@ function useEnqueue() {
   );
 }
 
+/** Play a stream-like item (Amazon album / playlist / station) or a HEOS Favorite. */
+function usePlayStream() {
+  const act = useAction();
+  const pid = useSelectedPid();
+  return useCallback(
+    (item: LibraryItem) => {
+      if (pid === null || !item.mid) return;
+      const mid = item.mid;
+      act(
+        () => (item.play === "favorite" ? api.playFavorite(pid, mid) : api.playStream(pid, { sid: item.sid, mid, name: item.name })),
+        `Playing ${item.name}`,
+      );
+    },
+    [act, pid],
+  );
+}
+
 function queueItemFor(item: LibraryItem, folderCid: string | null): QueueAddItem {
   // A track is queued with its container's cid plus its mid; a folder with its own cid.
   return item.container
     ? { sid: item.sid, cid: item.cid }
-    : { sid: item.sid, cid: item.album_id ?? folderCid, mid: item.mid };
+    : { sid: item.sid, cid: item.album_id || folderCid, mid: item.mid };
 }
 
 // ------------------------------------------------------------------- home
+const KIND_LABEL: Record<LibrarySource["kind"], string> = {
+  favorites: "HEOS Favorites",
+  service: "Streaming service",
+  dlna: "DLNA server",
+};
+
+function SourceIcon({ source }: { source: LibrarySource }) {
+  if (source.kind === "favorites") return <StarIcon color="primary" sx={{ fontSize: 40 }} />;
+  if (source.kind === "dlna") return <DnsIcon color="primary" sx={{ fontSize: 40 }} />;
+  return source.image_url ? (
+    <Avatar variant="rounded" src={source.image_url} alt="" sx={{ width: 40, height: 40, bgcolor: "transparent" }} />
+  ) : (
+    <CloudIcon color="primary" sx={{ fontSize: 40 }} />
+  );
+}
+
 function LibraryHome({ onOpen }: { onOpen: (loc: Location) => void }) {
   const act = useAction();
   const heosConnected = useAppState((s) => s.heos.connected);
-  const [servers, setServers] = useState<LibraryItem[] | null>(null);
+  const [sources, setSources] = useState<LibrarySource[] | null>(null);
   const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
   const [lastFolders, setLastFolders] = useState<Record<number, PathStep[]>>({});
 
   useEffect(() => {
     if (!heosConnected) return;
-    act(() => api.libraryServers()).then(async (res) => {
+    act(() => api.librarySources()).then(async (res) => {
       if (!res) return;
-      setServers(res.servers);
+      setSources(res.sources);
       const entries = await Promise.all(
-        res.servers.map(async (s) => [s.sid, (await api.lastFolder(s.sid).catch(() => ({ path: [] }))).path] as const),
+        res.sources.map(async (s) => [s.sid, (await api.lastFolder(s.sid).catch(() => ({ path: [] }))).path] as const),
       );
       setLastFolders(Object.fromEntries(entries));
     });
     api.shortcuts().then((r) => setShortcuts(r.shortcuts)).catch(() => undefined);
   }, [act, heosConnected]);
 
-  const serverName = (sid: number) => servers?.find((s) => s.sid === sid)?.name ?? "Server";
+  const sourceName = (sid: number) => sources?.find((s) => s.sid === sid)?.name ?? "Source";
   const unpin = async (id: number) => {
     await act(() => api.removeShortcut(id));
     const r = await act(() => api.shortcuts());
@@ -112,22 +148,24 @@ function LibraryHome({ onOpen }: { onOpen: (loc: Location) => void }) {
       <Typography variant="h5">Library</Typography>
 
       <Box>
-        <Typography variant="subtitle1" gutterBottom>Media servers</Typography>
-        {servers === null ? (
+        <Typography variant="subtitle1" gutterBottom>Sources</Typography>
+        {sources === null ? (
           heosConnected ? <CircularProgress size={28} /> : <Typography color="text.secondary">Not connected</Typography>
-        ) : servers.length === 0 ? (
-          <Typography color="text.secondary">The HEOS device sees no DLNA servers.</Typography>
+        ) : sources.length === 0 ? (
+          <Typography color="text.secondary">No music sources available. Sign in to HEOS or add a DLNA server.</Typography>
         ) : (
           <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
-            {servers.map((s) => {
+            {sources.map((s) => {
               const last = lastFolders[s.sid] ?? [];
               return (
                 <Box key={s.sid} sx={{ border: 1, borderColor: "divider", borderRadius: 4, bgcolor: "background.paper", overflow: "hidden" }}>
                   <ButtonBase onClick={() => onOpen({ sid: s.sid, server: s.name, path: [] })} sx={{ width: "100%", justifyContent: "flex-start", gap: 2, p: 2 }}>
-                    <DnsIcon color="primary" sx={{ fontSize: 40 }} />
+                    <SourceIcon source={s} />
                     <Box sx={{ textAlign: "left", minWidth: 0 }}>
                       <Typography variant="subtitle1" noWrap>{s.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">DLNA server</Typography>
+                      <Typography variant="caption" color="text.secondary" noWrap component="div">
+                        {KIND_LABEL[s.kind]}{s.account ? ` · ${s.account}` : ""}
+                      </Typography>
                     </Box>
                   </ButtonBase>
                   {last.length > 0 && (
@@ -163,11 +201,11 @@ function LibraryHome({ onOpen }: { onOpen: (loc: Location) => void }) {
                   </IconButton>
                 }
               >
-                <ListItemButton onClick={() => onOpen({ sid: sc.sid, server: serverName(sc.sid), path: sc.path })}>
+                <ListItemButton onClick={() => onOpen({ sid: sc.sid, server: sourceName(sc.sid), path: sc.path })}>
                   <ListItemAvatar>
                     <Avatar sx={{ bgcolor: "secondary.main", color: "secondary.contrastText" }}><PushPinIcon /></Avatar>
                   </ListItemAvatar>
-                  <ListItemText primary={sc.name} secondary={[serverName(sc.sid), ...sc.path.map((p) => p.name)].join(" › ")} />
+                  <ListItemText primary={sc.name} secondary={[sourceName(sc.sid), ...sc.path.map((p) => p.name)].join(" › ")} />
                 </ListItemButton>
               </ListItem>
             ))}
@@ -215,7 +253,7 @@ function ItemRow({
             <Avatar variant="rounded" src={item.image_url} alt="" slotProps={{ img: { loading: "lazy" } }} />
           ) : (
             <Avatar variant="rounded" sx={{ bgcolor: "action.hover", color: "text.secondary" }}>
-              {item.container ? <FolderIcon /> : <MusicNoteIcon />}
+              {item.container ? <FolderIcon /> : item.play === "queue" ? <MusicNoteIcon /> : <RadioIcon />}
             </Avatar>
           )}
         </ListItemAvatar>
@@ -227,7 +265,18 @@ function ItemRow({
 }
 
 /** What the actions apply to, and the three ways to add it to the queue. */
-function ActionBar({ target, onAdd, onClear }: { target: Target; onAdd: (mode: AddMode) => void; onClear: () => void }) {
+function ActionBar({
+  target,
+  onAdd,
+  onPlay,
+  onClear,
+}: {
+  target: Target;
+  onAdd: (mode: AddMode) => void;
+  onPlay: () => void;
+  onClear: () => void;
+}) {
+  const stream = target?.kind === "item" && target.item.play !== "queue";
   const label =
     target === null
       ? "Select a track or folder"
@@ -243,7 +292,7 @@ function ActionBar({ target, onAdd, onClear }: { target: Target; onAdd: (mode: A
     >
       <Stack direction="row" spacing={1} sx={{ flex: 1, minWidth: 0, alignItems: "center" }}>
         {target?.kind === "item" ? (
-          target.item.container ? <FolderIcon color="primary" /> : <MusicNoteIcon color="primary" />
+          target.item.container ? <FolderIcon color="primary" /> : stream ? <RadioIcon color="primary" /> : <MusicNoteIcon color="primary" />
         ) : (
           <LibraryMusicIcon color={disabled ? "disabled" : "primary"} />
         )}
@@ -252,6 +301,14 @@ function ActionBar({ target, onAdd, onClear }: { target: Target; onAdd: (mode: A
           <Button size="small" onClick={onClear} sx={{ flexShrink: 0 }}>Clear</Button>
         )}
       </Stack>
+      {stream ? (
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+          <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 260 }}>
+            {target.item.play === "favorite" ? "HEOS Favorite" : "Plays as a stream"}: replaces what is playing, not added to the queue
+          </Typography>
+          <Button variant="contained" startIcon={<PlayArrowIcon />} onClick={onPlay}>Play</Button>
+        </Stack>
+      ) : (
       <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
         <Button variant="contained" startIcon={<PlayArrowIcon />} disabled={disabled} onClick={() => onAdd("now")}>
           Add and play
@@ -263,6 +320,7 @@ function ActionBar({ target, onAdd, onClear }: { target: Target; onAdd: (mode: A
           Add to end of queue
         </Button>
       </Stack>
+      )}
     </Stack>
   );
 }
@@ -271,6 +329,7 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
   const act = useAction();
   const notify = useNotify();
   const enqueue = useEnqueue();
+  const playStream = usePlayStream();
   const cid = loc.path.length ? loc.path[loc.path.length - 1].cid : null;
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [total, setTotal] = useState<number | null>(null);
@@ -356,9 +415,11 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
 
   const folderName = loc.path.length ? loc.path[loc.path.length - 1].name : loc.server;
   // With nothing selected, the actions apply to the whole folder, if the amp says it can be queued.
+  // A folder the amp can queue whole, or one holding queueable tracks (e.g. an Amazon album).
+  const folderQueueable = Boolean(cid) && (playable || items.some((i) => !i.container && i.play === "queue"));
   const target: Target = selected
     ? { kind: "item", item: selected }
-    : playable && cid
+    : folderQueueable
       ? { kind: "folder", name: folderName, total }
       : null;
 
@@ -446,9 +507,10 @@ function Browser({ loc, onNavigate, onHome }: { loc: Location; onNavigate: (path
       <ActionBar
         target={target}
         onClear={() => setSelected(null)}
+        onPlay={() => selected && playStream(selected)}
         onAdd={(mode) => {
           if (selected) enqueue([queueItemFor(selected, cid)], mode);
-          else if (playable && cid) enqueue([{ sid: loc.sid, cid }], mode);
+          else if (folderQueueable && cid) enqueue([{ sid: loc.sid, cid }], mode);
         }}
       />
     </Stack>

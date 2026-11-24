@@ -8,6 +8,7 @@ import type {
   Health,
   InputItem,
   LibraryItem,
+  LibrarySource,
   PathStep,
   PlayerState,
   PowerInfo,
@@ -113,6 +114,10 @@ export const api = {
     request("POST", `/players/${pid}/queue/move`, { qids, to }),
 
   libraryServers: () => json.get<{ servers: LibraryItem[] }>("/library/servers"),
+  librarySources: () => json.get<{ sources: LibrarySource[] }>("/library/sources"),
+  playStream: (pid: number, item: { sid: number; mid: string; name: string }) =>
+    request("POST", `/players/${pid}/play-stream`, item),
+  playFavorite: (pid: number, mid: string) => request<{ preset: number }>("POST", `/players/${pid}/play-favorite`, { mid }),
   browse: (sid: number, cid: string | null, start = 0, count = 50, refresh = false) => {
     const q = new URLSearchParams({ start: String(start), count: String(count) });
     if (cid) q.set("cid", cid);

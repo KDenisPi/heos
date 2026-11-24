@@ -77,6 +77,57 @@ class _SystemError(Exception):
     """Answer eid 12, like the real NAS does for search."""
 
 
+class _AccountError(Exception):
+    """Answer eid -1239 "User account error", like Amazon's upsell banner."""
+
+
+# Amazon Music as the PM7000N exposes it: menus are containers, but albums,
+# playlists and stations are all single "station" items (mid .../#chunk)
+# that play with play_stream; they cannot be browsed into or queued.
+AMAZON_SID, FAVORITES_SID = 13, 1028
+AMAZON: dict[str, list[dict[str, Any]]] = {
+    "": [
+        {"container": "yes", "type": "container", "cid": "upsell-banner/#upsell_banner", "playable": "no",
+         "name": "NEW with Amazon Prime Music"},
+        {"container": "yes", "type": "container", "cid": "catalog/stations/#prime_stations", "playable": "no",
+         "name": "Prime Stations"},
+        {"container": "yes", "type": "container", "cid": "library/#library_node_desc", "playable": "no",
+         "name": "My Music"},
+    ],
+    "catalog/stations/#prime_stations": [
+        {"container": "no", "mid": "catalog/stations/AY3SGKQ2NWCM8/#chunk", "type": "station", "playable": "yes",
+         "name": "Classical Piano"},
+        {"container": "no", "mid": "catalog/stations/A7N20FA7H6YTO/#chunk", "type": "station", "playable": "yes",
+         "name": "All '90s"},
+    ],
+    "library/#library_node_desc": [
+        {"container": "yes", "type": "container", "cid": "library/albums/#library_albums-NAME-Albums",
+         "playable": "no", "name": "Albums"},
+        {"container": "no", "mid": "library/tracks/#chunk", "type": "station", "playable": "yes", "name": "Tracks"},
+        {"container": "yes", "type": "container", "playable": "no", "name": "14 Weeks of Silence",
+         "cid": "library/albums/77415132/#library_tracks-NAME-14 Weeks of Silence"},
+    ],
+    # A "My Music" album: a real container of songs, but no option 21.
+    "library/albums/77415132/#library_tracks-NAME-14 Weeks of Silence": [
+        {"container": "no", "mid": mid, "type": "song", "artist": "Zemfira", "album": "14 Weeks of Silence",
+         "album_id": "", "playable": "yes", "name": name, "duration": 200000}
+        for mid, name in [("B00HDQ8X1W", "Паранойя"), ("B00HDQ8XCQ", "Трафик"), ("B00HDQ8XNA", "Знак бесконечность")]
+    ],
+    "library/albums/#library_albums-NAME-Albums": [
+        {"container": "no", "mid": "catalog/albums/B0HRLGGK59/#chunk", "type": "station", "playable": "yes",
+         "name": "Chopin: The Great Works"},
+        {"container": "no", "mid": "catalog/albums/B00136Q1EO/#chunk", "type": "station", "playable": "yes",
+         "name": "Moods & Activities"},
+    ],
+}
+FAVORITES: list[dict[str, Any]] = [
+    {"container": "no", "mid": "catalog/stations/AY3SGKQ2NWCM8/#chunk", "type": "station", "playable": "yes",
+     "name": "Classical Piano"},
+    {"container": "no", "mid": "catalog/stations/AS655C0FAXO06/#chunk", "type": "station", "playable": "yes",
+     "name": "All '80s"},
+]
+
+
 @dataclass
 class FakePlayer:
     pid: int
@@ -94,6 +145,7 @@ class FakePlayer:
     queue: list[dict[str, Any]] = field(default_factory=list)
     current: int | None = None  # index into queue
     input: str | None = None
+    station: dict[str, Any] | None = None  # playing a stream (Amazon station/album, favorite)
 
     def renumber(self) -> None:
         for i, item in enumerate(self.queue, 1):
@@ -192,6 +244,9 @@ class FakeHeosServer:
             return
         except _SystemError:
             self._reply(writer, command, "fail", "eid=12&text=System error&syserrno=-9")
+            return
+        except _AccountError:
+            self._reply(writer, command, "fail", f"eid=-1239&text=User account error&{query}")
             return
         if isinstance(result, tuple) and len(result) == 3:
             message, payload, options = result
@@ -331,6 +386,10 @@ class FakeHeosServer:
         return self._cmd_player__get_play_mode(p, w)
 
     def _now_playing(self, pl: FakePlayer) -> dict[str, Any]:
+        if pl.station:
+            return {"type": "station", "song": f"{pl.station['name']} track", "station": pl.station["name"],
+                    "album": "", "artist": "", "image_url": "", "mid": pl.station["mid"], "qid": 1,
+                    "sid": pl.station["sid"]}
         if pl.input:
             name = dict(INPUTS).get(pl.input, pl.input)
             return {"type": "station", "song": name, "station": name, "album": "", "artist": "",
@@ -349,6 +408,7 @@ class FakeHeosServer:
 
     def _play_index(self, pl: FakePlayer, index: int | None) -> None:
         pl.input = None
+        pl.station = None
         pl.current = index
         self.emit("player_now_playing_changed", f"pid={pl.pid}")
         if index is not None:
@@ -443,6 +503,17 @@ class FakeHeosServer:
         elif sid in self.players:
             items = [{"container": "no", "playable": "yes", "type": "station", "name": name, "image_url": "",
                       "mid": mid} for mid, name in INPUTS]
+        elif sid == AMAZON_SID:
+            cid = p.get("cid", "")
+            if cid.startswith("upsell"):
+                raise _AccountError
+            if cid not in AMAZON:
+                raise KeyError(cid)
+            items = [dict({k: v for k, v in it.items() if k != "duration"}, image_url="") for it in AMAZON[cid]]
+            options = [{"browse": [{"id": 19, "name": "Add to HEOS Favorites"}]}]
+        elif sid == FAVORITES_SID:
+            items = [dict(it, image_url="") for it in FAVORITES]
+            options = [{"browse": [{"id": 20, "name": "Remove from HEOS Favorites"}]}]
         elif sid == 1024:
             items = [{"name": "Fake NAS", "image_url": "", "sid": DLNA_SID, "type": "dlna_server"}]
         elif sid == DLNA_SID:
@@ -468,7 +539,35 @@ class FakeHeosServer:
         message = f"{msg}&returned={len(page)}&count={total}"
         return (message, self._enc(page), options) if options else (message, self._enc(page))
 
+    def _start_station(self, pl: FakePlayer, sid: int, mid: str, name: str) -> None:
+        pl.input = None
+        pl.current = None
+        pl.station = {"sid": sid, "mid": mid, "name": name}
+        self.emit("player_now_playing_changed", f"pid={pl.pid}")
+        self._set_state(pl, "play")
+
+    def _cmd_browse__play_stream(self, p: dict[str, str], w: asyncio.StreamWriter) -> str:
+        pl = self._player(p)
+        sid, mid = int(p["sid"]), p["mid"]
+        items = [it for its in AMAZON.values() for it in its] if sid == AMAZON_SID else FAVORITES
+        match = next((it for it in items if it.get("mid") == mid), None)
+        if match is None:
+            raise KeyError(mid)
+        self._start_station(pl, sid, mid, p.get("name") or match["name"])
+        return "&".join(f"{k}={encode_value(v)}" for k, v in p.items())
+
+    def _cmd_browse__play_preset(self, p: dict[str, str], w: asyncio.StreamWriter) -> str:
+        pl = self._player(p)
+        preset = int(p["preset"])
+        if not 1 <= preset <= len(FAVORITES):
+            raise ValueError(preset)
+        fav = FAVORITES[preset - 1]
+        self._start_station(pl, FAVORITES_SID, fav["mid"], fav["name"])
+        return f"pid={pl.pid}&preset={preset}"
+
     def _cmd_browse__get_search_criteria(self, p: dict[str, str], w: asyncio.StreamWriter) -> tuple[str, Any]:
+        if int(p["sid"]) == AMAZON_SID:
+            return f"sid={AMAZON_SID}", []
         if int(p["sid"]) != DLNA_SID:
             raise KeyError(p["sid"])
         return f"sid={DLNA_SID}", [
@@ -478,6 +577,8 @@ class FakeHeosServer:
         ]
 
     def _cmd_browse__search(self, p: dict[str, str], w: asyncio.StreamWriter) -> tuple[str, Any]:
+        if int(p["sid"]) == AMAZON_SID:
+            raise _SystemError  # the PM7000N answers eid 12 for Amazon search too
         if int(p["sid"]) != DLNA_SID:
             raise KeyError(p["sid"])
         if not self.search_supported:
@@ -499,14 +600,18 @@ class FakeHeosServer:
             raise KeyError(p["input"])
         pl.input = p["input"]
         pl.current = None
+        pl.station = None
         self.emit("player_now_playing_changed", f"pid={pl.pid}")
         self._set_state(pl, "play")
         return f"pid={pl.pid}&input={p['input']}"
 
-    def _tracks_for(self, cid: str, mid: str | None) -> list[dict[str, Any]]:
-        if cid not in LIBRARY:
+    def _tracks_for(self, cid: str, mid: str | None, sid: int = DLNA_SID) -> list[dict[str, Any]]:
+        tree = AMAZON if sid == AMAZON_SID else LIBRARY
+        if cid not in tree:
             raise KeyError(cid)
-        tracks = [it for it in LIBRARY[cid] if it["type"] == "song"]
+        tracks = [it for it in tree[cid] if it["type"] == "song"]
+        if not tracks:
+            raise KeyError(cid)  # nothing playable in this container
         if mid:
             tracks = [it for it in tracks if it["mid"] == mid]
             if not tracks:
@@ -516,9 +621,10 @@ class FakeHeosServer:
 
     def _cmd_browse__add_to_queue(self, p: dict[str, str], w: asyncio.StreamWriter) -> str:
         pl = self._player(p)
-        if int(p["sid"]) != DLNA_SID:
+        sid = int(p["sid"])
+        if sid not in (DLNA_SID, AMAZON_SID):
             raise KeyError(p["sid"])
-        tracks = self._tracks_for(p.get("cid", ""), p.get("mid"))
+        tracks = self._tracks_for(p.get("cid", ""), p.get("mid"), sid)
         aid = int(p["aid"])
         after_current = (pl.current + 1) if pl.current is not None else len(pl.queue)
         if aid == 4:

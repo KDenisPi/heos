@@ -93,6 +93,19 @@ export interface LibraryItem {
   /** For tracks: the container they belong to (used to queue them, e.g. from search results). */
   album_id?: string | null;
   image_url: string;
+  /**
+   * How it plays: "queue" (add to queue modes), "stream" (Amazon albums,
+   * playlists, stations: replaces what is playing), "favorite" (HEOS Favorite).
+   */
+  play: "queue" | "stream" | "favorite";
+}
+
+export interface LibrarySource {
+  sid: number;
+  name: string;
+  kind: "favorites" | "service" | "dlna";
+  image_url: string;
+  account?: string | null;
 }
 
 export interface BrowsePage {

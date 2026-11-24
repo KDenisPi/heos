@@ -149,13 +149,13 @@ Navigation is folder-based, through the standard DLNA browse the HEOS CLI expose
 | ID | Requirement | Pri |
 | --- | --- | --- |
 | F6.1 | Amazon Music, played by the HEOS device. The Amazon login is entered once in the official app and stored in the HEOS account (its "keychain" of service logins); the device must be signed in to that HEOS account (F7). Our app never handles Amazon credentials | M |
-| F6.2 | Browse what the CLI exposes for Amazon: playlists, stations, My Music; search | M |
-| F6.3 | Play and queue Amazon items like DLNA items | M |
-| F6.4 | HEOS Favorites: list, play | S |
-| F6.5 | Generic source layer: any HEOS service is a `sid` with browse/search/queue, so adding a second service is configuration, not new code | M |
+| F6.2 | Browse what the CLI exposes for Amazon: Playlists, Prime Stations, Charts, Recommended, New, My Music (Playlists, Artists, Albums, Tracks, Genres, Purchased). The root's upsell entry fails with "User account error" and is hidden. Search: not available (no criteria; `browse/search` answers eid 12) | M |
+| F6.3 | Play and queue Amazon items. Catalog albums, playlists and stations are single `station` items (`…/#chunk`): they play with `browse/play_stream` and replace what is playing; they cannot be queued. "My Music" albums are containers of tracks: tracks queue like DLNA tracks, and the album's cid queues the whole album in one command. If the amp ever rejects a container, its tracks are added one by one | M |
+| F6.4 | HEOS Favorites (sid 1028): list, play with `browse/play_preset`; the position is read fresh before playing, so reordering in another app is safe | S |
+| F6.5 | Generic source layer: the Library home lists HEOS Favorites, every available `music_service` and the DLNA servers; each item carries `play` = `queue` / `stream` / `favorite`, so adding a second service is configuration, not new code | M |
 | F6.6 | Candidate lossless service for classical, not chosen yet. HEOS supports Qobuz natively and through Qobuz Connect (since 2025), plus TIDAL and Deezer | C |
 
-Amazon is only available through the HEOS device's own integration; the app never talks to Amazon directly. Which browse/search operations work for Amazon through the CLI is unverified, see section 9.
+Amazon is only available through the HEOS device's own integration; the app never talks to Amazon directly. What the CLI offers for Amazon was measured on the PM7000N (F6.2, F6.3, R2).
 
 ### F7. HEOS account
 
@@ -259,6 +259,9 @@ REST handles commands and queries, and one WebSocket pushes state. Base path `/a
 | POST | `/players/{pid}/queue/sort` | `{"by":"title\|artist\|album\|random","order":"asc\|desc"}`; progress as `queue_sort` events | F3.7 |
 | GET | `/sources` | Music sources incl. DLNA servers, Amazon | F5.1, F6 |
 | GET | `/library/servers` | DLNA servers | F5.1 |
+| GET | `/library/sources` | Library home: Favorites, streaming services, DLNA servers | F6.5 |
+| POST | `/players/{pid}/play-stream` | `{sid, mid, name}`: play an Amazon album/playlist/station | F6.3 |
+| POST | `/players/{pid}/play-favorite` | `{mid}`: play a HEOS Favorite | F6.4 |
 | GET | `/sources/{sid}/browse?cid=&start=&count=&refresh=` | Browse a container; `playable` = the container can be queued whole | F5.2, F5.5 |
 | GET | `/sources/{sid}/search?q=&criteria=` | Search; 501 if the server does not support it | F5.4, F6.2 |
 | GET | `/sources/{sid}/search-criteria` | Search criteria (scid) | F5.4 |
@@ -356,7 +359,7 @@ Power control was the biggest unknown; it is now solved through the amp's UPnP A
 | # | Item | Impact | Mitigation / next step |
 | --- | --- | --- | --- |
 | R1 | Power on/off path is undocumented | No app power control in v1 | **Resolved 2026-11-23:** UPnP ACT `SetDevicePowerState` on port 60006 switches ON/OFF in ~1 s, no auth (PM7000N, firmware 3.139.175). Avoid frequent power cycling |
-| R2 | Amazon Music browse/search through CLI may be partial | F6 reduced | Test `browse/browse` + `browse/search` on Amazon sid early (phase 0) |
+| R2 | Amazon Music browse/search through CLI may be partial | F6 reduced | **Answered 2026-11-23:** browse works (0.7–2.2 s per page, cached); search is not available; catalog albums/playlists play only as streams; My Music albums and tracks can be queued |
 | R3 | Streaming `mid`s in saved playlists may expire | F4 items unplayable | Store metadata; re-match by search (F4.6) |
 | R4 | HEOS queue sort has no native command; many `move_queue_item` calls on long queues | Slow sort (>500 items) | **Measured 2026-11-23 (PM7000N, 19 items):** 6–9 moves in 1.5–2.8 s. A multi-item move keeps queue order, so a sort is single moves; the planner moves only items outside the longest ordered run (n − LIS). The amp sometimes rejects a move with eid 12; the sort then re-reads the queue and re-plans (3 attempts) and verifies the result |
 | R5 | Firmware update changes CLI behaviour | Breakage | Pin tested firmware version in the README; integration tests against recorded responses |

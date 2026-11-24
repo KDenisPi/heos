@@ -106,6 +106,17 @@ class DevicePatch(BaseModel):
     default: bool | None = None
 
 
+class PlayStreamBody(BaseModel):
+    sid: int
+    mid: str
+    name: str = ""
+    cid: str | None = None
+
+
+class PlayFavoriteBody(BaseModel):
+    mid: str = Field(description="Media id of the favorite; its current position is looked up on the device")
+
+
 class PathStepBody(BaseModel):
     cid: str
     name: str
@@ -263,8 +274,11 @@ async def get_queue(pid: int, svc: Services = Depends(services)) -> dict[str, An
 
 @router.post("/players/{pid}/queue", tags=["queue"], dependencies=write)
 async def add_to_queue(pid: int, body: QueueAddBody, svc: Services = Depends(services)) -> dict[str, Any]:
-    await svc.players.add_to_queue(pid, [i.model_dump() for i in body.items], body.mode)
-    return {"added": len(body.items), "mode": body.mode}
+    # A container is queued whole; if the amp rejects that, its tracks are added one by one.
+    added = await svc.players.add_to_queue(
+        pid, [i.model_dump() for i in body.items], body.mode, expand=svc.library.tracks_of
+    )
+    return {"added": added, "mode": body.mode}
 
 
 @router.delete("/players/{pid}/queue", tags=["queue"], dependencies=write)
@@ -325,6 +339,28 @@ async def image(key: str, svc: Services = Depends(services)) -> FileResponse:
 
 
 # ------------------------------------------------------------------ library
+@router.get("/library/sources", tags=["library"])
+async def library_sources(svc: Services = Depends(services)) -> dict[str, Any]:
+    """Library home: HEOS Favorites, available streaming services (Amazon), DLNA servers (F6.5)."""
+    return {"sources": await svc.library.sources()}
+
+
+@router.post("/players/{pid}/play-stream", tags=["library"], dependencies=write)
+async def play_stream(pid: int, body: PlayStreamBody, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Play an item whose ``play`` is "stream" (Amazon albums, playlists, stations). Replaces what is playing."""
+    await svc.players.play_stream(pid, body.sid, body.mid, body.name, body.cid)
+    return {"playing": body.name or body.mid}
+
+
+@router.post("/players/{pid}/play-favorite", tags=["library"], dependencies=write)
+async def play_favorite(pid: int, body: PlayFavoriteBody, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Play a HEOS Favorite (F6.4). The position is read fresh, so reordering in the app is safe."""
+    svc.players.get(pid)
+    preset = await svc.library.favorite_preset(body.mid)
+    await svc.players.play_preset(pid, preset)
+    return {"preset": preset}
+
+
 @router.get("/library/servers", tags=["library"])
 async def library_servers(svc: Services = Depends(services)) -> dict[str, Any]:
     """DLNA / UPnP media servers the HEOS device sees (F5.1)."""
