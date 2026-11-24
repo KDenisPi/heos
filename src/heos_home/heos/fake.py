@@ -167,6 +167,11 @@ class FakeHeosServer:
         self.fail_next: dict[str, int] = {}  # command -> eid
         self.silent: set[str] = set()  # commands that never get an answer
         self.search_supported = True  # the real NAS answers eid 12 to every search
+        # Like the PM7000N: a move arriving within this many seconds of the
+        # previous one is rejected with eid 12 (the amp is still reordering).
+        self.move_busy_seconds = 0.0
+        self.busy_rejections = 0
+        self._last_move = 0.0
         self._writers: dict[asyncio.StreamWriter, bool] = {}  # writer -> registered for events
         self._server: asyncio.base_events.Server | None = None
 
@@ -461,6 +466,11 @@ class FakeHeosServer:
         return f"pid={pl.pid}"
 
     def _cmd_player__move_queue_item(self, p: dict[str, str], w: asyncio.StreamWriter) -> str:
+        now = asyncio.get_running_loop().time()
+        if self.move_busy_seconds and now - self._last_move < self.move_busy_seconds:
+            self.busy_rejections += 1
+            raise _SystemError
+        self._last_move = now
         pl = self._player(p)
         sqids = [int(x) for x in p["sqid"].split(",")]
         dqid = int(p["dqid"])

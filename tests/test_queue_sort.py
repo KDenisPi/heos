@@ -153,10 +153,45 @@ async def test_sort_recovers_from_rejected_move(app_env, fake):
     """The PM7000N once answered eid 12 to a move mid-sort; the sort must re-plan and finish."""
     _, _, http = app_env
     await fill(http)
-    fake.fail_next["player/move_queue_item"] = 12
+    fake.fail_next["player/move_queue_item"] = 12  # one rejection: retried, not a failure
     r = await http.post(f"/players/{PID}/queue/sort", json={"by": "title"})
     assert r.status_code == 200, r.text
     assert await songs(http) == sorted(await songs(http), key=str.casefold)
+
+
+async def test_sort_survives_a_busy_amp(app_env, fake, monkeypatch):
+    """The PM7000N rejects a move (eid 12) that arrives while it is still applying the previous one."""
+    import heos_home.services.players as players_mod
+    monkeypatch.setattr(players_mod, "MOVE_GAP", 0.0)  # no pacing: every move after the first hits "busy"
+    monkeypatch.setattr(players_mod, "MOVE_RETRY_DELAYS", (0.06, 0.06, 0.06, 0.06, 0.06))
+    _, _, http = app_env
+    await fill(http)
+    fake.move_busy_seconds = 0.05
+    r = await http.post(f"/players/{PID}/queue/sort", json={"by": "title"})
+    assert r.status_code == 200, r.text
+    assert await songs(http) == sorted(await songs(http), key=str.casefold)
+    assert fake.busy_rejections >= 1  # it really was busy, and the sort still finished
+
+
+async def test_pacing_avoids_busy_rejections(app_env, fake, monkeypatch):
+    import heos_home.services.players as players_mod
+    monkeypatch.setattr(players_mod, "MOVE_GAP", 0.06)
+    _, _, http = app_env
+    await fill(http)
+    fake.move_busy_seconds = 0.05
+    assert (await http.post(f"/players/{PID}/queue/sort", json={"by": "title"})).status_code == 200
+    assert fake.busy_rejections == 0
+
+
+async def test_drag_move_retries_when_busy(app_env, fake, monkeypatch):
+    import heos_home.services.players as players_mod
+    monkeypatch.setattr(players_mod, "MOVE_RETRY_DELAYS", (0.06,) * 5)
+    _, _, http = app_env
+    await fill(http)
+    fake.move_busy_seconds = 0.05
+    assert (await http.post(f"/players/{PID}/queue/move", json={"qids": [6], "to": 1})).status_code == 200
+    assert (await http.post(f"/players/{PID}/queue/move", json={"qids": [6], "to": 2})).status_code == 200
+    assert fake.busy_rejections == 1
 
 
 async def test_sort_gives_up_after_repeated_rejections(app_env, fake, monkeypatch):
@@ -171,6 +206,8 @@ async def test_sort_gives_up_after_repeated_rejections(app_env, fake, monkeypatc
         await original(text, writer)
 
     monkeypatch.setattr(fake, "_dispatch", always_fail_moves)
+    import heos_home.services.players as players_mod
+    monkeypatch.setattr(players_mod, "MOVE_RETRY_DELAYS", (0.01,) * 5)
     queue = svc.bus.subscribe()
     r = await http.post(f"/players/{PID}/queue/sort", json={"by": "title"})
     assert r.status_code == 502

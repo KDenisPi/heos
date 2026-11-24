@@ -25,6 +25,11 @@ REPEAT_MODES = {"off", "on_all", "on_one"}
 ADD_MODES = {"now": 1, "next": 2, "end": 3, "replace": 4}
 QUEUE_PAGE = 100
 SORT_ATTEMPTS = 3
+# The PM7000N confirms a move before it has finished reordering; a move sent
+# right after it fails with eid 12 ("System error", syserrno -2) and succeeds
+# when repeated a moment later. So moves are paced and retried.
+MOVE_GAP = 0.15
+MOVE_RETRY_DELAYS = (0.3, 0.6, 1.0, 1.5, 2.0)
 AUX_SOURCE_NAME = "aux input"
 
 
@@ -355,11 +360,25 @@ class PlayerService:
         self.get(pid)
         await self._cmd("player/clear_queue", pid=pid)
 
+    async def _move(self, pid: int, sqid: int | str, dqid: int) -> None:
+        """One move_queue_item, retried while the amp is still busy with the previous change."""
+        for attempt, delay in enumerate((0.0, *MOVE_RETRY_DELAYS)):
+            if delay:
+                await asyncio.sleep(delay)
+            try:
+                await self._cmd("player/move_queue_item", pid=pid, sqid=sqid, dqid=dqid)
+                return
+            except HeosCommandError as err:
+                if err.eid not in (12, 13) or attempt == len(MOVE_RETRY_DELAYS):
+                    raise
+                log.info("move %s -> %s rejected while busy (%s), retrying in %.1f s",
+                         sqid, dqid, err.text, MOVE_RETRY_DELAYS[attempt])
+
     async def move_queue(self, pid: int, qids: list[int], to: int) -> None:
         """Move ``qids`` so that they land at queue position ``to`` (a qid, 1-based)."""
         self.get(pid)
         if qids:
-            await self._cmd("player/move_queue_item", pid=pid, sqid=",".join(map(str, qids)), dqid=to)
+            await self._move(pid, ",".join(map(str, qids)), to)
 
     def sorting(self, pid: int) -> bool:
         lock = self._sorting.get(pid)
@@ -368,10 +387,11 @@ class PlayerService:
     async def sort_queue(self, pid: int, by: str, order: str = "asc") -> dict[str, Any]:
         """Sort the HEOS queue on the device (F3.7) with the fewest single moves.
 
-        The amp occasionally rejects a move (eid 12 "System error" seen on the
-        PM7000N). Then the sort re-reads the queue and plans again from where it
-        actually is, up to ``SORT_ATTEMPTS`` times, so it never stops halfway
-        silently. Raises ``ValueError`` for unknown or unavailable sort keys and
+        Moves are paced (``MOVE_GAP``) and each is retried while the amp
+        reports it is still busy (eid 12/13, see ``MOVE_RETRY_DELAYS``). If a
+        move still fails, the sort re-reads the queue and plans again from
+        where it actually is, up to ``SORT_ATTEMPTS`` times, so it never stops
+        halfway silently. Raises ``ValueError`` for unknown or unavailable sort keys and
         ``RuntimeError`` if the queue's content changed underneath the sort.
         """
         self.get(pid)
@@ -396,7 +416,9 @@ class PlayerService:
                     self.bus.publish("queue_sort", pid, {"state": "running", "done": sent, "total": total})
                     try:
                         for sqid, dqid in moves:
-                            await self._cmd("player/move_queue_item", pid=pid, sqid=sqid, dqid=dqid)
+                            if sent:
+                                await asyncio.sleep(MOVE_GAP)  # let the amp finish the previous move
+                            await self._move(pid, sqid, dqid)
                             sent += 1
                             if sent % 10 == 0 and sent < total:
                                 self.bus.publish("queue_sort", pid, {"state": "running", "done": sent, "total": total})
