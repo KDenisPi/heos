@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { Device } from "../api/types";
+import { PowerButton } from "../components/PowerButton";
 import { useAction } from "../notify";
 import { store, useAppState } from "../state/store";
 
@@ -56,6 +57,7 @@ function DeviceCard({ device }: { device: Device }) {
     <Card variant="outlined">
       <CardContent>
         <Stack direction="row" spacing={1} useFlexGap sx={{ mb: 1.5, alignItems: "center", flexWrap: "wrap" }}>
+          <PowerButton device={device} size="small" />
           <Typography variant="h6" sx={{ mr: 1 }}>{device.name}</Typography>
           <Chip size="small" label={device.online ? "Online" : "Offline"} color={device.online ? "success" : "default"} />
           <Chip size="small" variant="outlined" label={`Power: ${device.power.state}`} color={device.power.state === "on" ? "success" : "default"} />

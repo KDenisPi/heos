@@ -4,7 +4,7 @@ import PlayCircleIcon from "@mui/icons-material/PlayCircle";
 import QueueMusicIcon from "@mui/icons-material/QueueMusic";
 import SettingsIcon from "@mui/icons-material/Settings";
 import SpeakerIcon from "@mui/icons-material/Speaker";
-import { Box, ButtonBase, Menu, MenuItem, Stack, Typography } from "@mui/material";
+import { Box, ButtonBase, ListItemText, Menu, MenuItem, Stack, Typography } from "@mui/material";
 import { useState } from "react";
 import { selectPid, useSelectedDevice } from "../hooks/useSelectedPlayer";
 import { useAppState } from "../state/store";
@@ -46,7 +46,8 @@ export function NavRail({ view, onView, narrow }: { view: View; onView: (v: View
         sx={{ flexDirection: "column", width: 72, py: 1, borderRadius: 3 }}
         aria-label="Choose device"
       >
-        <SpeakerIcon color={device?.online ? "primary" : "disabled"} />
+        {/* Colour shows the selected device's power; switching is per device in this menu and on Devices. */}
+        <SpeakerIcon color={!device?.online ? "disabled" : device.power.state === "on" ? "success" : "primary"} />
         <Typography variant="caption" noWrap sx={{ maxWidth: 68 }}>
           {device?.name ?? "No device"}
         </Typography>
@@ -61,12 +62,16 @@ export function NavRail({ view, onView, narrow }: { view: View; onView: (v: View
               selectPid(d.pid);
               setAnchor(null);
             }}
+            sx={{ gap: 2, minWidth: 260 }}
           >
-            {d.name} {d.online ? "" : "(offline)"}
+            <ListItemText
+              primary={d.name}
+              secondary={!d.online ? "Offline" : d.power.state === "on" ? "On" : d.power.state === "standby" ? "Standby" : d.model}
+            />
+            <PowerButton device={d} size="small" />
           </MenuItem>
         ))}
       </Menu>
-      <PowerButton device={device} />
       <Box sx={{ height: 8 }} />
       {ITEMS.filter((i) => narrow || !i.narrowOnly).map((i) => (
         <RailItem key={i.view} active={view === i.view} label={i.label} icon={i.icon} onClick={() => onView(i.view)} />

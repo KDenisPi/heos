@@ -298,7 +298,7 @@ The primary layout is tablet landscape (1920 x 1200 px, about 1280 x 800 dp at t
 
 | Pane | Width | Content |
 | --- | --- | --- |
-| Left rail | 80 dp | Device switcher, power button, nav icons: Library, Playlists, Inputs, Settings |
+| Left rail | 80 dp | Device switcher (each device listed with its own power button and state), nav icons: Library, Playlists, Inputs, Devices, Settings |
 | Main | flexible | Current view: browse (DLNA / Amazon / Favorites), playlist editor, inputs grid, settings |
 | Right panel | 420 dp | Now playing (cover, title, transport, progress, volume) above the current queue |
 
@@ -309,7 +309,9 @@ The primary layout is tablet landscape (1920 x 1200 px, about 1280 x 800 dp at t
 3. **Search:** one box per source, results grouped by type (artist / album / track).
 4. **Playlists:** list of local playlists with item count and duration. Detail view supports inline editing, sort, load (replace/append), export.
 5. **Inputs:** a large-tile grid (Phono, CD, Line, Optical 1, Optical 2, Coax, Network). One tap switches input and powers on if the amp is in standby.
-6. **Devices:** discovered devices, "Re-discover" button, status, IP override, power driver config, "Test power", device info and firmware, "Open native settings" (F8).
+6. **Devices:** discovered devices, "Re-discover" button, status, a power button per device, IP override, power driver config, "Test power", device info and firmware, "Open native settings" (F8).
+
+Power is always per device: there is no app-wide power button, since each HEOS device has its own power state.
 7. **Settings:** HEOS account sign-in, theme, default device, backup/restore of config and playlists, about/version.
 
 **Phone layout (phase 2):** single pane with bottom navigation (Now playing · Library · Playlists · Inputs), and a mini-player bar above it that expands to full now-playing.
