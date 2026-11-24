@@ -122,12 +122,12 @@ Priority: **M** = must (v1), **S** = should (v1 if time allows), **C** = could (
 
 | ID | Requirement | Pri |
 | --- | --- | --- |
-| F4.1 | Save the current queue as a named local playlist, stored on the server | M |
+| F4.1 | Save the current queue as a named local playlist, stored on the server; the only question asked is the name (a clash is reported in the dialog). The HEOS queue has no source id, so each track's sid + container is taken from what this service queued (remembered in `cache/track-sources.json`) or traced through its `album_id` container on the DLNA servers; tracks that cannot be traced are saved but marked unresolved | M |
 | F4.2 | List, rename, duplicate, delete local playlists | M |
-| F4.3 | Load a playlist: replace queue, or append | M |
+| F4.3 | Load a playlist: add and play, replace queue and play, add to end (append). Unresolved tracks are skipped and counted; runs that equal a whole container in order are added as that container in one command | M |
 | F4.4 | Edit a playlist without playing it: add, remove, reorder, sort by rule | S |
 | F4.5 | Import / export: playlists are already .m3u8 files; download or upload them from the UI | S |
-| F4.6 | Mark items that cannot be resolved any more (DLNA file gone, streaming ID expired); offer re-match by title/artist search | S |
+| F4.6 | Mark items that cannot be resolved any more (DLNA file gone, streaming ID expired, or source never traced); offer re-match by title/artist search. v1: marked and skipped; re-match later (the NAS in use has no search) | S |
 | F4.7 | Optionally also save to HEOS (`player/save_queue`) | C |
 
 ### F5. DLNA / UPnP media servers
@@ -216,16 +216,18 @@ There is no database. Settings live in JSON files and each playlist is its own M
 ```text
 #EXTM3U
 #PLAYLIST:Bach Cantatas
-#EXTINF:1325,J.S. Bach - Cantata BWV 140: I. Chorus
+#EXTINF:-1,J.S. Bach - Cantata BWV 140: I. Chorus
 #EXTALB:Cantatas Vol. 1
-#EXTHEOS:{"sid":1,"cid":"64$1$3","mid":"64$1$3$7","track":1}
+#EXTART:J.S. Bach
+#EXTHEOS:{"sid":1,"cid":"64$1$3","mid":"64$1$3$7","title":"Cantata BWV 140: I. Chorus","artist":"J.S. Bach","album":"Cantatas Vol. 1"}
 heos://1/64%241%243/64%241%243%247
 ```
 
 - `#EXTINF` / `#EXTALB` / `#PLAYLIST` are standard extended-M3U tags, so any text editor or M3U tool shows the list correctly.
 - `#EXTHEOS` holds the HEOS IDs needed to queue the item; other tools ignore unknown `#` lines.
 - The location line is a `heos://` URI. The HEOS CLI does not expose the DLNA file path or URL, so other players can read the list but cannot play it directly.
-- Title, artist, album and duration are stored with each item, so an item whose ID no longer resolves can still be shown and re-matched (F4.6).
+- Title, artist and album are stored with each item, so an item whose ID no longer resolves can still be shown and re-matched (F4.6). The HEOS queue reports no durations, so `#EXTINF` carries -1.
+- An item whose source could not be traced is written with `heos://unresolved/<mid>` and skipped when loading.
 
 **Rules**
 
@@ -267,9 +269,11 @@ REST handles commands and queries, and one WebSocket pushes state. Base path `/a
 | GET | `/sources/{sid}/search-criteria` | Search criteria (scid) | F5.4 |
 | GET/POST/DELETE | `/library/shortcuts[/{id}]` | Pinned folders | F5.7 |
 | GET/PUT | `/library/last-folder/{sid}` | Last browsed folder per server | F5.7 |
-| GET/POST | `/playlists` | List / create (incl. from current queue) | F4.1–F4.2 |
+| GET/POST | `/playlists` | List / create; `{"name":…,"from_queue":pid}` saves the current queue (409 if the name exists) | F4.1–F4.2 |
+| POST | `/playlists/{id}/duplicate`, `/playlists/{id}/sort` | Duplicate; sort by title/artist/album/random | F4.2, F4.4 |
+| POST | `/playlists/import` | Upload an .m3u8 file (request body) | F4.5 |
 | GET/PATCH/DELETE | `/playlists/{id}` | Read, rename, edit items, delete | F4.2, F4.4 |
-| POST | `/playlists/{id}/load` | `{"pid":…,"mode":"replace\|append"}` | F4.3 |
+| POST | `/playlists/{id}/load` | `{"pid":…,"mode":"now\|replace\|end"}` (`append` = `end`); progress as `playlist_load` events | F4.3 |
 | GET | `/playlists/{id}/export` | Download the .m3u8 file | F4.5 |
 | GET/POST | `/account` | Status, sign in/out | F7 |
 | GET | `/health` | Liveness + CLI connection state | NFR |

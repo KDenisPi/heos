@@ -15,6 +15,10 @@ export interface AppState {
   queueVersion: Record<number, number>;
   /** Progress of a running queue sort, per pid. */
   queueSort: Record<number, QueueSortProgress>;
+  /** Bumped when local playlists change (saved, renamed, edited, deleted). */
+  playlistsVersion: number;
+  /** Progress of loading a playlist into the queue, per pid. */
+  playlistLoad: Record<number, { id: string; done: number; total: number }>;
   /** Bumped when the device list should be refetched. */
   devicesVersion: number;
   /** Wall-clock ms when the last progress event arrived, per pid (for interpolation). */
@@ -30,6 +34,8 @@ export const initialState: AppState = {
   account: { signed_in: false, username: null },
   queueVersion: {},
   queueSort: {},
+  playlistsVersion: 0,
+  playlistLoad: {},
   devicesVersion: 0,
   progressAt: {},
   lastPlaybackError: null,
@@ -93,6 +99,10 @@ export function reduce(state: AppState, ev: ServerEvent, now = Date.now()): AppS
       return { ...patchPlayer(state, ev.pid, { last_error: ev.data.error }), lastPlaybackError: { pid: ev.pid, error: ev.data.error, at: now } };
     case "queue_changed":
       return { ...state, queueVersion: { ...state.queueVersion, [ev.pid]: (state.queueVersion[ev.pid] ?? 0) + 1 } };
+    case "playlists_changed":
+      return { ...state, playlistsVersion: state.playlistsVersion + 1 };
+    case "playlist_load":
+      return { ...state, playlistLoad: { ...state.playlistLoad, [ev.pid]: ev.data } };
     case "queue_sort":
       return { ...state, queueSort: { ...state.queueSort, [ev.pid]: ev.data } };
     case "power":

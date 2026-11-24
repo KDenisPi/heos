@@ -6,7 +6,8 @@ import hmac
 from typing import Any, Literal
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
+from urllib.parse import quote
 from pydantic import BaseModel, Field, model_validator
 
 from .. import __version__
@@ -115,6 +116,30 @@ class PlayStreamBody(BaseModel):
 
 class PlayFavoriteBody(BaseModel):
     mid: str = Field(description="Media id of the favorite; its current position is looked up on the device")
+
+
+class PlaylistCreateBody(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    from_queue: int | None = Field(default=None, description="pid whose current queue is saved")
+
+
+class PlaylistPatchBody(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    items: list[dict[str, Any]] | None = Field(default=None, description="New item list (remove / reorder)")
+
+
+class PlaylistDuplicateBody(BaseModel):
+    name: str | None = None
+
+
+class PlaylistLoadBody(BaseModel):
+    pid: int
+    mode: Literal["now", "replace", "end", "append"] = "replace"
+
+
+class PlaylistSortBody(BaseModel):
+    by: Literal["title", "artist", "album", "random"]
+    order: Literal["asc", "desc"] = "asc"
 
 
 class PathStepBody(BaseModel):
@@ -275,9 +300,10 @@ async def get_queue(pid: int, svc: Services = Depends(services)) -> dict[str, An
 @router.post("/players/{pid}/queue", tags=["queue"], dependencies=write)
 async def add_to_queue(pid: int, body: QueueAddBody, svc: Services = Depends(services)) -> dict[str, Any]:
     # A container is queued whole; if the amp rejects that, its tracks are added one by one.
-    added = await svc.players.add_to_queue(
-        pid, [i.model_dump() for i in body.items], body.mode, expand=svc.library.tracks_of
-    )
+    items = [i.model_dump() for i in body.items]
+    added = await svc.players.add_to_queue(pid, items, body.mode, expand=svc.library.tracks_of)
+    # Remember where each track came from, so the queue can be saved as a playlist (F4.1).
+    await svc.playlists.remember_queued(items)
     return {"added": added, "mode": body.mode}
 
 
@@ -428,3 +454,77 @@ async def get_last_folder(sid: int, svc: Services = Depends(services)) -> dict[s
 async def set_last_folder(sid: int, body: LastFolderBody, svc: Services = Depends(services)) -> dict[str, Any]:
     svc.library.set_last_folder(sid, [p.model_dump() for p in body.path])
     return {"sid": sid, "path": svc.library.last_folder(sid)}
+
+
+# ---------------------------------------------------------------- playlists
+@router.get("/playlists", tags=["playlists"])
+async def list_playlists(svc: Services = Depends(services)) -> dict[str, Any]:
+    """Local playlists (M3U8 files on the server), with item and unresolved counts (F4.2)."""
+    return {"playlists": svc.playlists.list()}
+
+
+@router.post("/playlists", tags=["playlists"], dependencies=write)
+async def create_playlist(body: PlaylistCreateBody, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Create a playlist; with ``from_queue`` it saves that player's current queue (F4.1). 409 if the name exists."""
+    if body.from_queue is not None:
+        return await svc.playlists.save_queue(body.from_queue, body.name)
+    return svc.playlists.create(body.name).summary()
+
+
+@router.post("/playlists/import", tags=["playlists"], dependencies=write)
+async def import_playlist(request: Request, name: str | None = None, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Import an .m3u8 file sent as the request body (F4.5)."""
+    body = await request.body()
+    if len(body) > 5 * 1024 * 1024:
+        raise ValueError("playlist file too large")
+    return svc.playlists.import_text(body.decode("utf-8", errors="replace"), name).summary()
+
+
+@router.get("/playlists/{playlist_id}", tags=["playlists"])
+async def get_playlist(playlist_id: str, svc: Services = Depends(services)) -> dict[str, Any]:
+    return svc.playlists.get(playlist_id).to_dict()
+
+
+@router.patch("/playlists/{playlist_id}", tags=["playlists"], dependencies=write)
+async def patch_playlist(playlist_id: str, body: PlaylistPatchBody, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Rename, or replace the item list (remove / reorder) without playing (F4.2, F4.4)."""
+    if body.items is not None:
+        svc.playlists.update_items(playlist_id, body.items)
+    if body.name is not None:
+        return svc.playlists.rename(playlist_id, body.name).to_dict()
+    return svc.playlists.get(playlist_id).to_dict()
+
+
+@router.delete("/playlists/{playlist_id}", tags=["playlists"], dependencies=write)
+async def delete_playlist(playlist_id: str, svc: Services = Depends(services)) -> dict[str, Any]:
+    svc.playlists.delete(playlist_id)
+    return {"deleted": playlist_id}
+
+
+@router.post("/playlists/{playlist_id}/duplicate", tags=["playlists"], dependencies=write)
+async def duplicate_playlist(
+    playlist_id: str, body: PlaylistDuplicateBody = Body(default=PlaylistDuplicateBody()), svc: Services = Depends(services)
+) -> dict[str, Any]:
+    return svc.playlists.duplicate(playlist_id, body.name).summary()
+
+
+@router.post("/playlists/{playlist_id}/sort", tags=["playlists"], dependencies=write)
+async def sort_playlist(playlist_id: str, body: PlaylistSortBody, svc: Services = Depends(services)) -> dict[str, Any]:
+    return svc.playlists.sort(playlist_id, body.by, body.order).to_dict()
+
+
+@router.post("/playlists/{playlist_id}/load", tags=["playlists"], dependencies=write)
+async def load_playlist(playlist_id: str, body: PlaylistLoadBody, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Put the playlist into the HEOS queue (F4.3). Unresolved tracks are skipped and counted."""
+    return await svc.playlists.load(playlist_id, body.pid, body.mode)
+
+
+@router.get("/playlists/{playlist_id}/export", tags=["playlists"])
+async def export_playlist(playlist_id: str, svc: Services = Depends(services)) -> Response:
+    """Download the .m3u8 file (F4.5)."""
+    filename, text = svc.playlists.export(playlist_id)
+    return Response(
+        content=text.encode("utf-8"),
+        media_type="audio/x-mpegurl; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=playlist.m3u8; filename*=UTF-8''{quote(filename)}"},
+    )

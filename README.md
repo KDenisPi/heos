@@ -24,7 +24,8 @@ Phase 1 backend (core):
 | Queue sort: title / artist / album / random, asc/desc, fewest moves, retry on rejected moves | ✅ | F3.7 |
 | DLNA library: servers, folder browsing with paging and breadcrumb, play/queue tracks and folders, search where supported (filter fallback), 10 min cache, pinned folders, last folder | ✅ | F5.1–F5.5, F5.7 |
 | Amazon Music (browse, play streams, queue My Music tracks and albums) and HEOS Favorites | ✅ | F6.1–F6.5 |
-| Local playlists, HEOS sign-in | next | F4, F7 |
+| Local playlists: save queue (name only), list, load (3 modes), edit, sort, rename, duplicate, delete, import/export .m3u8 | ✅ | F4.1–F4.5 |
+| Re-match unresolved playlist items, HEOS sign-in, phone layout | next | F4.6, F7 |
 
 ## Tested devices
 
@@ -120,7 +121,7 @@ curl -X POST localhost:8080/api/v1/players/-1234/queue/sort -H 'content-type: ap
 
 WebSocket `/api/v1/ws` sends a `snapshot` first, then events:
 `player_state`, `volume`, `now_playing`, `progress`, `queue_changed`,
-`play_mode`, `playback_error`, `power`, `queue_sort`, `player_full`, `device_online`,
+`play_mode`, `playback_error`, `power`, `queue_sort`, `playlists_changed`, `playlist_load`, `player_full`, `device_online`,
 `device_offline`, `devices_changed`, `players_changed`, `sources_changed`,
 `account`, `connection`. Send `{"type":"ping"}` to get a `pong`.
 
@@ -158,6 +159,8 @@ src/heos_home/
   services/players.py player state cache, events, player and queue commands
   services/devices.py discovery, overrides, choice of CLI host
   services/power.py   power drivers (UPnP ACT) and power state polling
+  services/library.py DLNA / Amazon / Favorites browsing
+  services/playlists.py local M3U8 playlists and track-source memory
   api/                FastAPI app, REST routes, WebSocket
   storage.py          config.json / state.json, atomic writes
 tests/                protocol, client and API tests against the fake device

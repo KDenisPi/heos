@@ -453,6 +453,7 @@ class PlayerService:
         items: list[dict[str, Any]],
         mode: str,
         expand: Callable[[dict[str, Any]], Awaitable[list[dict[str, Any]]]] | None = None,
+        progress: Callable[[int, int], None] | None = None,
     ) -> int:
         """Add browse/search items to the queue (F3.6); returns how many items were added.
 
@@ -467,7 +468,10 @@ class PlayerService:
             raise ValueError(f"mode must be one of {sorted(ADD_MODES)}")
         mode_of_aid = {1: "now", 2: "next", 3: "end", 4: "replace"}
         added = 0
-        for item, aid in self._add_plan(items, mode):
+        plan = self._add_plan(items, mode)
+        for step, (item, aid) in enumerate(plan, 1):
+            if progress and len(plan) > 1 and (step == 1 or step % 10 == 0):
+                progress(step - 1, len(plan))
             try:
                 await self._add_one(pid, item, aid)
                 added += 1
@@ -479,6 +483,8 @@ class PlayerService:
                 for track, track_aid in self._add_plan(tracks, mode_of_aid[aid]):
                     await self._add_one(pid, track, track_aid)
                 added += len(tracks)
+        if progress and len(plan) > 1:
+            progress(len(plan), len(plan))
         return added
 
     async def _add_one(self, pid: int, item: dict[str, Any], aid: int) -> None:

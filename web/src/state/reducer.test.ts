@@ -78,3 +78,12 @@ describe("queue sort progress", () => {
     expect(s.queueSort[-1].state).toBe("done");
   });
 });
+
+describe("playlists", () => {
+  it("bumps the version on playlists_changed and tracks load progress", () => {
+    let s = reduce(snap, { type: "playlists_changed", data: { id: "jazz" } });
+    expect(s.playlistsVersion).toBe(1);
+    s = reduce(s, { type: "playlist_load", pid: -1, data: { id: "jazz", done: 10, total: 40 } });
+    expect(s.playlistLoad[-1]).toEqual({ id: "jazz", done: 10, total: 40 });
+  });
+});

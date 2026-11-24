@@ -14,7 +14,7 @@ import { makeTheme } from "./theme";
 import { DevicesView } from "./views/DevicesView";
 import { InputsView } from "./views/InputsView";
 import { LibraryView } from "./views/LibraryView";
-import { PlaceholderView } from "./views/PlaceholderView";
+import { PlaylistsView } from "./views/PlaylistsView";
 import { SettingsView } from "./views/SettingsView";
 
 /**
@@ -64,7 +64,7 @@ function MainView({ view, wide }: { view: View; wide: boolean }) {
     case "library":
       return <LibraryView />;
     case "playlists":
-      return <PlaceholderView title="Playlists" text="Local playlists (M3U8 on the server) arrive in phase 3." />;
+      return <PlaylistsView />;
   }
 }
 

@@ -6,6 +6,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import EqualizerIcon from "@mui/icons-material/Equalizer";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import SaveIcon from "@mui/icons-material/Save";
 import ShuffleIcon from "@mui/icons-material/Shuffle";
 import SortByAlphaIcon from "@mui/icons-material/SortByAlpha";
 import SwapVertIcon from "@mui/icons-material/SwapVert";
@@ -30,6 +31,7 @@ import { api } from "../api/client";
 import type { QueueItem, SortKey } from "../api/types";
 import { useAction } from "../notify";
 import { useAppState } from "../state/store";
+import { SavePlaylistDialog } from "./SavePlaylistDialog";
 
 function Row({
   item,
@@ -92,6 +94,7 @@ export function QueuePanel({ pid }: { pid: number }) {
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const [descending, setDescending] = useState(false);
+  const [saving, setSaving] = useState(false);
   const sort = useAppState((s) => s.queueSort[pid]);
   const sorting = sort?.state === "running";
 
@@ -164,7 +167,15 @@ export function QueuePanel({ pid }: { pid: number }) {
             <ShuffleIcon fontSize="small" sx={{ mr: 1.5 }} /> Random order
           </MenuItem>
           <Divider />
-          <MenuItem disabled>Save as playlist… (phase 3)</MenuItem>
+          <MenuItem
+            disabled={!items?.length || sorting}
+            onClick={() => {
+              setMenu(null);
+              setSaving(true);
+            }}
+          >
+            <SaveIcon fontSize="small" sx={{ mr: 1.5 }} /> Save as playlist…
+          </MenuItem>
         </Menu>
       </Stack>
       {sorting && (
@@ -207,6 +218,7 @@ export function QueuePanel({ pid }: { pid: number }) {
           </DndContext>
         )}
       </Box>
+      <SavePlaylistDialog pid={pid} open={saving} onClose={() => setSaving(false)} />
     </Stack>
   );
 }

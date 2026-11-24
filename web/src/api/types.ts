@@ -100,6 +100,31 @@ export interface LibraryItem {
   play: "queue" | "stream" | "favorite";
 }
 
+// --------------------------------------------------------------- playlists
+export interface PlaylistSummary {
+  id: string;
+  name: string;
+  count: number;
+  /** Tracks whose source could not be traced; skipped when loading. */
+  unresolved: number;
+  modified: number;
+}
+
+export interface PlaylistEntry {
+  title: string;
+  artist: string;
+  album: string;
+  sid: number | null;
+  cid: string | null;
+  mid: string | null;
+  image_url: string;
+  resolved: boolean;
+}
+
+export interface Playlist extends PlaylistSummary {
+  items: PlaylistEntry[];
+}
+
 export interface LibrarySource {
   sid: number;
   name: string;
@@ -181,4 +206,6 @@ export type ServerEvent =
   | { type: "device_online"; pid: number; data?: Partial<Device> }
   | { type: "device_offline"; pid: number }
   | { type: "account"; data: Account }
+  | { type: "playlists_changed"; data?: { id: string; deleted?: boolean } }
+  | { type: "playlist_load"; pid: number; data: { id: string; done: number; total: number } }
   | { type: "devices_changed" | "players_changed" | "sources_changed" | "pong" };

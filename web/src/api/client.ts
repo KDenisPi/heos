@@ -10,6 +10,9 @@ import type {
   LibraryItem,
   LibrarySource,
   PathStep,
+  Playlist,
+  PlaylistEntry,
+  PlaylistSummary,
   PlayerState,
   PowerInfo,
   QueueAddItem,
@@ -133,4 +136,30 @@ export const api = {
   removeShortcut: (id: number) => request("DELETE", `/library/shortcuts/${id}`),
   lastFolder: (sid: number) => json.get<{ path: PathStep[] }>(`/library/last-folder/${sid}`),
   setLastFolder: (sid: number, path: PathStep[]) => request("PUT", `/library/last-folder/${sid}`, { path }),
+
+  playlists: () => json.get<{ playlists: PlaylistSummary[] }>("/playlists"),
+  playlist: (id: string) => json.get<Playlist>(`/playlists/${encodeURIComponent(id)}`),
+  createPlaylist: (name: string, fromQueue?: number) =>
+    request<PlaylistSummary>("POST", "/playlists", fromQueue === undefined ? { name } : { name, from_queue: fromQueue }),
+  renamePlaylist: (id: string, name: string) => request<Playlist>("PATCH", `/playlists/${encodeURIComponent(id)}`, { name }),
+  setPlaylistItems: (id: string, items: PlaylistEntry[]) =>
+    request<Playlist>("PATCH", `/playlists/${encodeURIComponent(id)}`, { items }),
+  deletePlaylist: (id: string) => request("DELETE", `/playlists/${encodeURIComponent(id)}`),
+  duplicatePlaylist: (id: string) => request<PlaylistSummary>("POST", `/playlists/${encodeURIComponent(id)}/duplicate`, {}),
+  sortPlaylist: (id: string, by: SortKey, order: "asc" | "desc") =>
+    request<Playlist>("POST", `/playlists/${encodeURIComponent(id)}/sort`, { by, order }),
+  loadPlaylist: (id: string, pid: number, mode: AddMode) =>
+    request<{ tracks: number; skipped: number; commands: number }>("POST", `/playlists/${encodeURIComponent(id)}/load`, { pid, mode }),
+  importPlaylist: async (text: string, name?: string) => {
+    const token = getToken();
+    const resp = await fetch(`${BASE}/playlists/import${name ? `?name=${encodeURIComponent(name)}` : ""}`, {
+      method: "POST",
+      headers: { "Content-Type": "audio/x-mpegurl", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: text,
+    });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) throw new ApiError(resp.status, data?.error?.code ?? "http_error", data?.error?.message ?? `HTTP ${resp.status}`);
+    return data as PlaylistSummary;
+  },
+  exportUrl: (id: string) => `${BASE}/playlists/${encodeURIComponent(id)}/export`,
 };

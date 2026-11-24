@@ -18,6 +18,7 @@ from ..services.devices import DeviceService
 from ..services.events import EventBus
 from ..services.images import ImageCache, ImageError
 from ..services.library import LibraryService, SearchNotSupported
+from ..services.playlists import PlaylistExists, PlaylistService
 from ..services.players import PlayerService
 from ..services.power import PowerDriverError, PowerManager, PowerNotSupported, PowerRateLimited
 from ..settings import Settings
@@ -37,6 +38,7 @@ class Services:
     images: ImageCache
     power: PowerManager
     library: LibraryService
+    playlists: PlaylistService
 
 
 def build_services(settings: Settings, client: HeosClient | None = None) -> Services:
@@ -49,7 +51,8 @@ def build_services(settings: Settings, client: HeosClient | None = None) -> Serv
     power = PowerManager(storage, players, client, bus)
     devices.power = power
     library = LibraryService(client, storage, images)
-    return Services(settings, storage, bus, client, players, devices, images, power, library)
+    playlists = PlaylistService(storage, players, library, bus)
+    return Services(settings, storage, bus, client, players, devices, images, power, library, playlists)
 
 
 def create_app(settings: Settings | None = None, services: Services | None = None) -> FastAPI:
@@ -124,6 +127,10 @@ def _install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(PowerNotSupported)
     async def _no_power(_: Request, exc: PowerNotSupported) -> JSONResponse:
         return _error(501, "power_not_supported", str(exc))
+
+    @app.exception_handler(PlaylistExists)
+    async def _playlist_exists(_: Request, exc: PlaylistExists) -> JSONResponse:
+        return _error(409, "playlist_exists", str(exc))
 
     @app.exception_handler(SearchNotSupported)
     async def _no_search(_: Request, exc: SearchNotSupported) -> JSONResponse:
