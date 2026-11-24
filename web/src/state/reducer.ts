@@ -1,7 +1,7 @@
 // Pure state transitions for WebSocket events. Kept free of React and the
 // browser so it can be unit-tested.
 
-import type { Account, Device, PlayerState, QueueSortProgress, ServerEvent } from "../api/types";
+import type { Account, Device, PlayerState, QueueSortProgress, ServerEvent, Settings } from "../api/types";
 
 export interface AppState {
   /** WebSocket to the heos-home service is open. */
@@ -11,6 +11,7 @@ export interface AppState {
   players: Record<number, PlayerState>;
   devices: Device[];
   account: Account;
+  settings: Settings;
   /** Bumped on every queue_changed event; views refetch when it changes. */
   queueVersion: Record<number, number>;
   /** Progress of a running queue sort, per pid. */
@@ -34,6 +35,7 @@ export const initialState: AppState = {
   players: {},
   devices: [],
   account: { signed_in: false, username: null },
+  settings: { volume_max: 50, volume_step: 1 },
   queueVersion: {},
   queueSort: {},
   favoritesVersion: 0,
@@ -66,6 +68,7 @@ export function reduce(state: AppState, ev: ServerEvent, now = Date.now()): AppS
         players,
         devices: ev.data.devices,
         account: ev.data.account,
+        settings: ev.data.settings ?? state.settings,
         devicesVersion: state.devicesVersion + 1,
       };
     }
@@ -102,6 +105,8 @@ export function reduce(state: AppState, ev: ServerEvent, now = Date.now()): AppS
       return { ...patchPlayer(state, ev.pid, { last_error: ev.data.error }), lastPlaybackError: { pid: ev.pid, error: ev.data.error, at: now } };
     case "queue_changed":
       return { ...state, queueVersion: { ...state.queueVersion, [ev.pid]: (state.queueVersion[ev.pid] ?? 0) + 1 } };
+    case "settings":
+      return { ...state, settings: ev.data };
     case "favorites_changed":
       return { ...state, favoritesVersion: state.favoritesVersion + 1 };
     case "playlists_changed":

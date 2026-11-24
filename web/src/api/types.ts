@@ -184,6 +184,14 @@ export interface Account {
   error?: string | null;
 }
 
+/** Service-wide settings (config.json). */
+export interface Settings {
+  /** Highest volume this app sets (the service caps every change). */
+  volume_max: number;
+  /** Step of the - / + volume buttons. */
+  volume_step: number;
+}
+
 export interface Health {
   status: string;
   version: string;
@@ -196,6 +204,7 @@ export interface Snapshot {
   players: PlayerState[];
   devices: Device[];
   account: Account;
+  settings?: Settings;
 }
 
 export type ServerEvent =
@@ -216,5 +225,6 @@ export type ServerEvent =
   | { type: "account"; data: Account }
   | { type: "playlists_changed"; data?: { id: string; deleted?: boolean } }
   | { type: "favorites_changed" }
+  | { type: "settings"; data: Settings }
   | { type: "playlist_load"; pid: number; data: { id: string; done: number; total: number } }
   | { type: "devices_changed" | "players_changed" | "sources_changed" | "pong" };

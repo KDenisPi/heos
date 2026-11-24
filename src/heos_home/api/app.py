@@ -47,7 +47,7 @@ def build_services(settings: Settings, client: HeosClient | None = None) -> Serv
     storage = Storage(settings.data_dir)
     bus = EventBus()
     client = client or HeosClient(port=settings.heos_port)
-    players = PlayerService(client, bus)
+    players = PlayerService(client, bus, max_volume=lambda: storage.config.data.volume.max)
     devices = DeviceService(settings, storage, client, players, bus)
     images = ImageCache(storage.images_dir)
     power = PowerManager(storage, players, client, bus)

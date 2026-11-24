@@ -17,6 +17,7 @@ import type {
   PowerInfo,
   QueueAddItem,
   QueueItem,
+  Settings,
   Shortcut,
   SortKey,
 } from "./types";
@@ -82,6 +83,8 @@ const json = { get: <T>(p: string) => request<T>("GET", p) };
 export const api = {
   health: () => json.get<Health>("/health"),
   account: () => json.get<Account>("/account"),
+  settings: () => json.get<Settings>("/settings"),
+  patchSettings: (patch: Partial<Settings>) => request<Settings>("PATCH", "/settings", patch),
   signIn: (username: string, password: string, remember: boolean) =>
     request<Account>("POST", "/account/sign-in", { username, password, remember }),
   signOut: () => request<Account>("POST", "/account/sign-out"),
@@ -101,8 +104,10 @@ export const api = {
   player: (pid: number) => json.get<PlayerState>(`/players/${pid}/state`),
   transport: (pid: number, action: "play" | "pause" | "stop" | "next" | "prev") =>
     request("POST", `/players/${pid}/transport`, { action }),
-  setVolume: (pid: number, level: number) => request("PUT", `/players/${pid}/volume`, { level }),
-  stepVolume: (pid: number, step: number) => request("PUT", `/players/${pid}/volume`, { step }),
+  setVolume: (pid: number, level: number) =>
+    request<{ level: number; max: number; limited: boolean }>("PUT", `/players/${pid}/volume`, { level }),
+  stepVolume: (pid: number, step: number) =>
+    request<{ level: number; max: number; limited: boolean }>("PUT", `/players/${pid}/volume`, { step }),
   setMute: (pid: number, state: boolean) => request("PUT", `/players/${pid}/mute`, { state }),
   setPlayMode: (pid: number, mode: { shuffle?: boolean; repeat?: string }) =>
     request("PUT", `/players/${pid}/play-mode`, mode),

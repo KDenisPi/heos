@@ -163,6 +163,11 @@ class LastFolderBody(BaseModel):
     path: list[PathStepBody]
 
 
+class SettingsPatch(BaseModel):
+    volume_max: int | None = Field(default=None, ge=1, le=100, description="Highest volume this app will set")
+    volume_step: int | None = Field(default=None, ge=1, le=10, description="Step of the - / + buttons")
+
+
 class PowerBody(BaseModel):
     state: Literal["on", "off"]
 
@@ -186,6 +191,35 @@ class SignInBody(BaseModel):
     username: str = Field(min_length=1, max_length=200)
     password: str = Field(min_length=1, max_length=200)
     remember: bool = Field(True, description="Save encrypted on the server and sign in again after an amp reboot")
+
+
+def _settings(svc: Services) -> dict[str, Any]:
+    vol = svc.storage.config.data.volume
+    return {"volume_max": vol.max, "volume_step": vol.step}
+
+
+@router.get("/settings", tags=["system"])
+async def get_settings(svc: Services = Depends(services)) -> dict[str, Any]:
+    """Service-wide settings (config.json): volume limit and step."""
+    return _settings(svc)
+
+
+@router.patch("/settings", tags=["system"], dependencies=write)
+async def patch_settings(body: SettingsPatch, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Change settings; pushed to every client as a ``settings`` event.
+
+    Lowering the volume limit does not change the amp's current volume; it caps
+    the next change made through this app.
+    """
+    vol = svc.storage.config.data.volume
+    if body.volume_max is not None:
+        vol.max = body.volume_max
+    if body.volume_step is not None:
+        vol.step = body.volume_step
+    svc.storage.config.save()
+    result = _settings(svc)
+    svc.bus.publish("settings", data=result)
+    return result
 
 
 @router.get("/account", tags=["account"])
@@ -288,12 +322,16 @@ async def transport(pid: int, body: TransportBody, svc: Services = Depends(servi
 
 @router.put("/players/{pid}/volume", tags=["players"], dependencies=write)
 async def volume(pid: int, body: VolumeBody, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Set (``level``) or step (``step``) the volume; capped at the configured maximum."""
+    requested = body.level
     if body.level is not None:
         await svc.players.set_volume(pid, body.level)
     else:
         await svc.players.step_volume(pid, body.step or 0)
     player = svc.players.get(pid)
-    return {"level": player.volume, "mute": player.mute}
+    limit = svc.storage.config.data.volume.max
+    return {"level": player.volume, "mute": player.mute, "max": limit,
+            "limited": requested is not None and requested > limit}
 
 
 @router.put("/players/{pid}/mute", tags=["players"], dependencies=write)

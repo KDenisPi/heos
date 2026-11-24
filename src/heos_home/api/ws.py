@@ -30,6 +30,10 @@ async def websocket(ws: WebSocket) -> None:
                     "players": [p.to_dict() for p in svc.players.players.values()],
                     "devices": svc.devices.list(),
                     "account": svc.account.status(),
+                    "settings": {
+                        "volume_max": svc.storage.config.data.volume.max,
+                        "volume_step": svc.storage.config.data.volume.step,
+                    },
                 },
             }
         )

@@ -90,9 +90,10 @@ class PlayerState:
 
 
 class PlayerService:
-    def __init__(self, client: HeosClient, bus: EventBus) -> None:
+    def __init__(self, client: HeosClient, bus: EventBus, max_volume: Callable[[], int] = lambda: 100) -> None:
         self.client = client
         self.bus = bus
+        self.max_volume = max_volume  # configured limit (Settings), read on every change
         self.players: dict[int, PlayerState] = {}
         self._inputs: dict[int, list[dict[str, Any]]] = {}
         self._sources: list[dict[str, Any]] | None = None
@@ -261,18 +262,35 @@ class PlayerService:
             raise ValueError(f"unknown transport action {action!r}")
 
     async def set_volume(self, pid: int, level: int) -> int:
+        """Set the volume, capped at the configured maximum. Returns the level actually set."""
         player = self.get(pid)
-        level = max(0, min(100, int(level)))
+        level = max(0, min(self.max_volume(), 100, int(level)))
         await self._cmd("player/set_volume", pid=pid, level=level)
         player.volume = level
         return level
 
-    async def step_volume(self, pid: int, step: int) -> None:
-        self.get(pid)
-        if step == 0:
-            return
+    async def step_volume(self, pid: int, step: int) -> int:
+        """Step up or down from the current level; up never passes the configured maximum.
+
+        The target level is computed here and set with set_volume (not
+        volume_up/down), so a limit cannot be overshot and the volume event that
+        the amp sends back cannot be counted twice. Returns the new level.
+        """
+        player = self.get(pid)
         size = max(1, min(10, abs(int(step))))
-        await self._cmd("player/volume_up" if step > 0 else "player/volume_down", pid=pid, step=size)
+        if step > 0:
+            target = min(player.volume + size, self.max_volume(), 100)
+            if target <= player.volume:
+                return player.volume  # already at (or above) the limit
+        elif step < 0:
+            target = max(0, player.volume - size)
+            if target == player.volume:
+                return player.volume
+        else:
+            return player.volume
+        player.volume = target
+        await self._cmd("player/set_volume", pid=pid, level=target)
+        return target
 
     async def set_mute(self, pid: int, state: bool) -> None:
         player = self.get(pid)

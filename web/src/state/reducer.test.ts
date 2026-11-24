@@ -101,3 +101,11 @@ describe("account", () => {
     expect(s.account).toMatchObject({ signed_in: false, remembered: true, auto_sign_in: true });
   });
 });
+
+describe("settings", () => {
+  it("defaults to a volume limit of 50 and follows settings events", () => {
+    expect(initialState.settings).toEqual({ volume_max: 50, volume_step: 1 });
+    const s = reduce(snap, { type: "settings", data: { volume_max: 35, volume_step: 2 } });
+    expect(s.settings.volume_max).toBe(35);
+  });
+});

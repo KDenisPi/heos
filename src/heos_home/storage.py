@@ -80,9 +80,17 @@ class FolderShortcut(BaseModel):
 CONFIG_VERSION = 2
 
 
+class VolumeConfig(BaseModel):
+    """Volume limits applied by this service to every volume change it makes."""
+
+    max: int = Field(50, ge=1, le=100)
+    step: int = Field(1, ge=1, le=10)
+
+
 class Config(BaseModel):
     version: int = CONFIG_VERSION
     default_pid: int | None = None
+    volume: VolumeConfig = Field(default_factory=VolumeConfig)
     devices: list[DeviceConfig] = Field(default_factory=list)
     folder_shortcuts: list[FolderShortcut] = Field(default_factory=list)
     ui: dict[str, Any] = Field(default_factory=lambda: {"theme": "dark"})

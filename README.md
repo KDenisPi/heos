@@ -13,7 +13,7 @@ Phase 1 backend (core):
 | --- | --- | --- |
 | HEOS CLI client: one socket, serialized commands, "command under process", events, heartbeat 30 s, reconnect 1–30 s backoff, re-register | ✅ | §8 |
 | SSDP discovery, manual IPs, device list, IP override, re-discover | ✅ | F1 |
-| Transport, volume (level/step), mute, shuffle/repeat | ✅ | F3.1, F3.2 |
+| Transport, volume (slider, − / +, maximum from Settings, default 50), mute, shuffle/repeat | ✅ | F3.1, F3.2 |
 | Inputs read from the device, input select | ✅ | F3.3 |
 | Now playing + progress, pushed over WebSocket | ✅ | F3.4 |
 | Queue: list, add (now/next/end/replace), move, remove, clear, play item | ✅ | F3.5, F3.6 |
@@ -122,7 +122,7 @@ curl -X POST localhost:8080/api/v1/players/-1234/queue/sort -H 'content-type: ap
 
 WebSocket `/api/v1/ws` sends a `snapshot` first, then events:
 `player_state`, `volume`, `now_playing`, `progress`, `queue_changed`,
-`play_mode`, `playback_error`, `power`, `queue_sort`, `playlists_changed`, `playlist_load`, `favorites_changed`, `player_full`, `device_online`,
+`play_mode`, `playback_error`, `power`, `queue_sort`, `playlists_changed`, `playlist_load`, `favorites_changed`, `settings`, `player_full`, `device_online`,
 `device_offline`, `devices_changed`, `players_changed`, `sources_changed`,
 `account`, `connection`. Send `{"type":"ping"}` to get a `pong`.
 

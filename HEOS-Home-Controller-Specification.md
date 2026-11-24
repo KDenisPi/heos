@@ -110,7 +110,7 @@ Priority: **M** = must (v1), **S** = should (v1 if time allows), **C** = could (
 | ID | Requirement | Pri |
 | --- | --- | --- |
 | F3.1 | Transport: play, pause, stop, next, previous; shuffle and repeat | M |
-| F3.2 | Volume slider 0–100, step up/down, mute | M |
+| F3.2 | Volume slider, − / + step buttons (step 1, 2 or 5), mute. A maximum volume set in Settings (default 50) caps every volume change made through the service; the slider ends at it. The amp's remote and the official app are not limited | M |
 | F3.3 | Input select: phono, CD, line, optical 1/2, coax; list read from the device, not hard-coded | M |
 | F3.4 | Now playing: title, artist, album, cover art, source, progress bar (from `player_now_playing_progress` events) | M |
 | F3.5 | Show the current HEOS queue; remove items; move items (`player/move_queue_item`); clear | M |
@@ -204,6 +204,7 @@ There is no database. Settings live in JSON files and each playlist is its own M
      "ip": "192.168.1.50", "ip_override": null,
      "power": {"driver": "auto", "config": {}}}
   ],
+  "volume": {"max": 50, "step": 1},
   "folder_shortcuts": [
     {"name": "Classical", "sid": 1, "cid": "64$1$3"}
   ],
@@ -249,7 +250,8 @@ REST handles commands and queries, and one WebSocket pushes state. Base path `/a
 | POST | `/devices/{pid}/power` | `{"state":"on"\|"off"}`; 429 if switched < 10 s ago | F2.1 |
 | GET | `/players/{pid}/state` | Play state, volume, mute, input, now playing | F3 |
 | POST | `/players/{pid}/transport` | `{"action":"play\|pause\|stop\|next\|prev"}` | F3.1 |
-| PUT | `/players/{pid}/volume` | `{"level":0-100}` or `{"step":±n}` | F3.2 |
+| PUT | `/players/{pid}/volume` | `{"level":0-100}` or `{"step":±n}`; capped at the maximum, answer has `max` and `limited` | F3.2 |
+| GET/PATCH | `/settings` | `{"volume_max":1-100,"volume_step":1-10}` (default 50 / 1); pushed as `settings` events | F3.2 |
 | PUT | `/players/{pid}/mute` | `{"state":true}` | F3.2 |
 | PUT | `/players/{pid}/play-mode` | `{"shuffle":…,"repeat":…}` | F3.1 |
 | GET | `/players/{pid}/inputs` | Available inputs | F3.3 |

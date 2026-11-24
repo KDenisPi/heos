@@ -16,6 +16,7 @@ import type { Health } from "../api/types";
 import { useNotify } from "../notify";
 import { type ThemeMode, setPrefs, usePrefs } from "../state/prefs";
 import { AccountCard } from "../components/AccountCard";
+import { VolumeSettingsCard } from "../components/VolumeSettingsCard";
 
 export function SettingsView() {
   const prefs = usePrefs();
@@ -32,6 +33,8 @@ export function SettingsView() {
       <Typography variant="h5">Settings</Typography>
 
       <AccountCard />
+
+      <VolumeSettingsCard />
 
       <Card variant="outlined">
         <CardContent>
