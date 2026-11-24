@@ -17,6 +17,7 @@ from ..heos.protocol import HeosCommandError, HeosConnectionError, HeosTimeoutEr
 from ..services.devices import DeviceService
 from ..services.events import EventBus
 from ..services.images import ImageCache, ImageError
+from ..services.library import LibraryService, SearchNotSupported
 from ..services.players import PlayerService
 from ..services.power import PowerDriverError, PowerManager, PowerNotSupported, PowerRateLimited
 from ..settings import Settings
@@ -35,6 +36,7 @@ class Services:
     devices: DeviceService
     images: ImageCache
     power: PowerManager
+    library: LibraryService
 
 
 def build_services(settings: Settings, client: HeosClient | None = None) -> Services:
@@ -46,7 +48,8 @@ def build_services(settings: Settings, client: HeosClient | None = None) -> Serv
     images = ImageCache(storage.images_dir)
     power = PowerManager(storage, players, client, bus)
     devices.power = power
-    return Services(settings, storage, bus, client, players, devices, images, power)
+    library = LibraryService(client, storage, images)
+    return Services(settings, storage, bus, client, players, devices, images, power, library)
 
 
 def create_app(settings: Settings | None = None, services: Services | None = None) -> FastAPI:
@@ -121,6 +124,10 @@ def _install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(PowerNotSupported)
     async def _no_power(_: Request, exc: PowerNotSupported) -> JSONResponse:
         return _error(501, "power_not_supported", str(exc))
+
+    @app.exception_handler(SearchNotSupported)
+    async def _no_search(_: Request, exc: SearchNotSupported) -> JSONResponse:
+        return _error(501, "search_not_supported", str(exc))
 
     @app.exception_handler(PowerRateLimited)
     async def _power_rate(_: Request, exc: PowerRateLimited) -> JSONResponse:

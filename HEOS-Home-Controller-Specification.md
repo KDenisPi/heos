@@ -134,15 +134,15 @@ Priority: **M** = must (v1), **S** = should (v1 if time allows), **C** = could (
 
 | ID | Requirement | Pri |
 | --- | --- | --- |
-| F5.1 | List DLNA servers the HEOS device sees (`browse/get_music_sources`, type `dlna_server`) | M |
+| F5.1 | List DLNA servers the HEOS device sees (`browse/browse?sid=1024`, "Local Music", lists each server with its own sid) | M |
 | F5.2 | Browse containers page by page (`browse/browse` with `range`), breadcrumb navigation | M |
-| F5.3 | Play or queue a single track, a folder, or a whole container (`add_to_queue` with `cid`) | M |
-| F5.4 | Search within a server, where the server supports it (`browse/search`) | S |
+| F5.3 | Play or queue a single track (`cid` + `mid`), a folder, or a whole container (`add_to_queue` with `cid`). A folder holding tracks is listed as `playable: no` by its parent, but browsing it returns option 21 "Playable Container"; that option decides whether "Play all" is offered | M |
+| F5.4 | Search within a server, where the server supports it (`browse/search`). The NAS in use answers every search with eid 12, so the UI falls back to filtering the loaded folder | S |
 | F5.5 | Server-side cache of browse results (TTL 10 min) to make the UI fast | S |
 | F5.6 | Recursive add of a folder tree (server walks it, queues in batches) | C |
 | F5.7 | Folder shortcuts: pin favourite folders per server, and reopen at the last browsed folder | S |
 
-Navigation is folder-based, through the standard DLNA browse the HEOS CLI exposes. The music is already organized by folder on the server, so no server-specific tag indexing is needed.
+Navigation is folder-based, through the standard DLNA browse the HEOS CLI exposes. The music is already organized by folder on the server, so no server-specific tag indexing is needed. On the NAS in use the path is server → Music → Folder → share (e.g. `music`) → folders; Music also offers the server's own views (Songs, Artist, Album, Genre, …), which stay browsable. Pages take 30–110 ms on the PM7000N.
 
 ### F6. External services: Amazon Music
 
@@ -258,8 +258,12 @@ REST handles commands and queries, and one WebSocket pushes state. Base path `/a
 | POST | `/players/{pid}/queue/move` | `{"qids":[…],"to":n}` | F3.5 |
 | POST | `/players/{pid}/queue/sort` | `{"by":"title\|artist\|album\|random","order":"asc\|desc"}`; progress as `queue_sort` events | F3.7 |
 | GET | `/sources` | Music sources incl. DLNA servers, Amazon | F5.1, F6 |
-| GET | `/sources/{sid}/browse?cid=&start=&count=` | Browse a container | F5.2 |
-| GET | `/sources/{sid}/search?q=&criteria=` | Search | F5.4, F6.2 |
+| GET | `/library/servers` | DLNA servers | F5.1 |
+| GET | `/sources/{sid}/browse?cid=&start=&count=&refresh=` | Browse a container; `playable` = the container can be queued whole | F5.2, F5.5 |
+| GET | `/sources/{sid}/search?q=&criteria=` | Search; 501 if the server does not support it | F5.4, F6.2 |
+| GET | `/sources/{sid}/search-criteria` | Search criteria (scid) | F5.4 |
+| GET/POST/DELETE | `/library/shortcuts[/{id}]` | Pinned folders | F5.7 |
+| GET/PUT | `/library/last-folder/{sid}` | Last browsed folder per server | F5.7 |
 | GET/POST | `/playlists` | List / create (incl. from current queue) | F4.1–F4.2 |
 | GET/PATCH/DELETE | `/playlists/{id}` | Read, rename, edit items, delete | F4.2, F4.4 |
 | POST | `/playlists/{id}/load` | `{"pid":…,"mode":"replace\|append"}` | F4.3 |

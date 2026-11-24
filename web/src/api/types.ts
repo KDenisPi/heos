@@ -79,6 +79,52 @@ export interface QueueSortProgress {
   error?: string;
 }
 
+// ------------------------------------------------------------------ library
+export interface LibraryItem {
+  sid: number;
+  name: string;
+  type: string;
+  container: boolean;
+  playable: boolean;
+  cid: string | null;
+  mid: string | null;
+  artist: string;
+  album: string;
+  image_url: string;
+}
+
+export interface BrowsePage {
+  sid: number;
+  cid: string | null;
+  start: number;
+  count: number;
+  total: number;
+  /** The browsed container itself can be queued as a whole. */
+  playable: boolean;
+  items: LibraryItem[];
+}
+
+export interface PathStep {
+  cid: string;
+  name: string;
+}
+
+export interface Shortcut {
+  id: number;
+  name: string;
+  sid: number;
+  cid: string;
+  path: PathStep[];
+}
+
+export type AddMode = "now" | "next" | "end" | "replace";
+
+export interface QueueAddItem {
+  sid: number;
+  cid?: string | null;
+  mid?: string | null;
+}
+
 export interface InputItem {
   input: string;
   name: string;

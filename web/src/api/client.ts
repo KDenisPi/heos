@@ -1,6 +1,21 @@
 // Thin REST client for /api/v1. Errors carry the service's {error:{code,message}}.
 
-import type { Account, Device, Health, InputItem, PlayerState, PowerInfo, QueueItem, SortKey } from "./types";
+import type {
+  Account,
+  AddMode,
+  BrowsePage,
+  Device,
+  Health,
+  InputItem,
+  LibraryItem,
+  PathStep,
+  PlayerState,
+  PowerInfo,
+  QueueAddItem,
+  QueueItem,
+  Shortcut,
+  SortKey,
+} from "./types";
 
 const BASE = "/api/v1";
 const TOKEN_KEY = "heos-home.token";
@@ -90,8 +105,27 @@ export const api = {
   playQueueItem: (pid: number, qid: number) => request("POST", `/players/${pid}/queue/play`, { qid }),
   removeFromQueue: (pid: number, qids: number[]) => request("DELETE", `/players/${pid}/queue`, { qids }),
   clearQueue: (pid: number) => request("DELETE", `/players/${pid}/queue`),
+  addToQueue: (pid: number, items: QueueAddItem[], mode: AddMode) =>
+    request<{ added: number; mode: AddMode }>("POST", `/players/${pid}/queue`, { items, mode }),
   sortQueue: (pid: number, by: SortKey, order: "asc" | "desc" = "asc") =>
     request<{ by: string; order: string; items: number; moves: number }>("POST", `/players/${pid}/queue/sort`, { by, order }),
   moveQueue: (pid: number, qids: number[], to: number) =>
     request("POST", `/players/${pid}/queue/move`, { qids, to }),
+
+  libraryServers: () => json.get<{ servers: LibraryItem[] }>("/library/servers"),
+  browse: (sid: number, cid: string | null, start = 0, count = 50, refresh = false) => {
+    const q = new URLSearchParams({ start: String(start), count: String(count) });
+    if (cid) q.set("cid", cid);
+    if (refresh) q.set("refresh", "true");
+    return json.get<BrowsePage>(`/sources/${sid}/browse?${q}`);
+  },
+  search: (sid: number, q: string, criteria = 3) =>
+    json.get<{ items: LibraryItem[]; total: number }>(
+      `/sources/${sid}/search?${new URLSearchParams({ q, criteria: String(criteria) })}`,
+    ),
+  shortcuts: () => json.get<{ shortcuts: Shortcut[] }>("/library/shortcuts"),
+  addShortcut: (sid: number, path: PathStep[]) => request<Shortcut>("POST", "/library/shortcuts", { sid, path }),
+  removeShortcut: (id: number) => request("DELETE", `/library/shortcuts/${id}`),
+  lastFolder: (sid: number) => json.get<{ path: PathStep[] }>(`/library/last-folder/${sid}`),
+  setLastFolder: (sid: number, path: PathStep[]) => request("PUT", `/library/last-folder/${sid}`, { path }),
 };

@@ -13,6 +13,7 @@ import { store, useAppState } from "./state/store";
 import { makeTheme } from "./theme";
 import { DevicesView } from "./views/DevicesView";
 import { InputsView } from "./views/InputsView";
+import { LibraryView } from "./views/LibraryView";
 import { PlaceholderView } from "./views/PlaceholderView";
 import { SettingsView } from "./views/SettingsView";
 
@@ -46,7 +47,7 @@ function MainView({ view }: { view: View }) {
     case "settings":
       return <SettingsView />;
     case "library":
-      return <PlaceholderView title="Library" text="DLNA servers, Amazon Music and HEOS Favorites arrive in phase 2." />;
+      return <LibraryView />;
     case "playlists":
       return <PlaceholderView title="Playlists" text="Local playlists (M3U8 on the server) arrive in phase 3." />;
   }
@@ -64,8 +65,8 @@ function PlaybackErrors() {
 function Shell() {
   // Tablet landscape (≈1280 dp) gets three panes; narrower screens fold the player into a view.
   const wide = useMediaQuery("(min-width: 1000px)");
-  const [view, setView] = useState<View>("inputs");
-  const shown: View = wide && view === "now" ? "inputs" : view;
+  const [view, setView] = useState<View>("library");
+  const shown: View = wide && view === "now" ? "library" : view;
 
   return (
     <Box sx={{ height: "100dvh", display: "flex", flexDirection: "column" }}>
@@ -73,7 +74,7 @@ function Shell() {
       <PlaybackErrors />
       <Box sx={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: wide ? "80px minmax(0,1fr) 420px" : "80px minmax(0,1fr)" }}>
         <NavRail view={shown} onView={setView} narrow={!wide} />
-        <Box component="main" sx={{ minWidth: 0, minHeight: 0, overflowY: shown === "now" ? "hidden" : "auto" }}>
+        <Box component="main" sx={{ minWidth: 0, minHeight: 0, overflowY: shown === "now" ? "hidden" : "auto", height: "100%" }}>
           <MainView view={shown} />
         </Box>
         {wide && (

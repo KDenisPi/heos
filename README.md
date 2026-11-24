@@ -22,7 +22,8 @@ Phase 1 backend (core):
 | Local cache for source logos and input icons | ✅ | §1 (no cloud dependency) |
 | Tablet PWA (React + MUI): now playing, volume, transport, queue with drag reorder, inputs, devices, power, settings | ✅ | §7 |
 | Queue sort: title / artist / album / random, asc/desc, fewest moves, retry on rejected moves | ✅ | F3.7 |
-| DLNA/Amazon browse + search, playlists, sign-in | next | F4–F7 |
+| DLNA library: servers, folder browsing with paging and breadcrumb, play/queue tracks and folders, search where supported (filter fallback), 10 min cache, pinned folders, last folder | ✅ | F5.1–F5.5, F5.7 |
+| Amazon Music, HEOS Favorites, playlists, sign-in | next | F4, F6, F7 |
 
 ## Tested devices
 
@@ -31,7 +32,7 @@ and firmware the service is checked against here.
 
 | Model | Firmware | Network | Checked | What was checked |
 | --- | --- | --- | --- | --- |
-| Marantz PM7000N | 3.139.175 | Wi-Fi | 2026-11-23 | SSDP discovery, CLI connect, `player/get_players`; power state read and on/off switch via UPnP ACT (port 60006); `move_queue_item` semantics and queue sort |
+| Marantz PM7000N | 3.139.175 | Wi-Fi | 2026-11-23 | SSDP discovery, CLI connect, `player/get_players`; power state read and on/off switch via UPnP ACT (port 60006); `move_queue_item` semantics and queue sort; DLNA browse, paging, add folder/track to queue (NAS: search unsupported, eid 12) |
 
 The fake device (`heos_home/heos/fake.py`) reports firmware 3.84.410; that is a
 placeholder, not a tested real version.

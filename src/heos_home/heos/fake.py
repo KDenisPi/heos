@@ -33,9 +33,25 @@ INPUTS = [
 DLNA_SID = 111
 LOGO = "https://logos.example.invalid/media/images/service/logos"
 LIBRARY: dict[str, list[dict[str, Any]]] = {
-    # cid -> items; "" is the server root.
+    # cid -> items; "" is the server root. Shaped like the NAS seen on the real amp:
+    # folders say playable=no in their parent's listing even when they hold tracks.
     "": [
         {"container": "yes", "playable": "no", "type": "container", "name": "Music", "cid": "64$1"},
+        {"container": "yes", "playable": "no", "type": "container", "name": "Folder", "cid": "64$9"},
+    ],
+    "64$9": [
+        {"container": "yes", "playable": "no", "type": "container", "name": "classic", "cid": "64$9$1"},
+        {"container": "yes", "playable": "no", "type": "container", "name": "empty", "cid": "64$9$2"},
+    ],
+    "64$9$1": [
+        {"container": "yes", "playable": "no", "type": "container", "name": "Big Box", "cid": "64$9$1$1"},
+    ],
+    "64$9$2": [],
+    "64$9$1$1": [
+        {"container": "no", "playable": "yes", "type": "song", "name": f"Track {i:03d}",
+         "artist": "Various", "album": "Big Box", "mid": f"64$9$1$1${i}", "duration": 180000,
+         "image_url": "http://192.0.2.11:8200/cover/bigbox.jpg"}
+        for i in range(1, 121)
     ],
     "64$1": [
         {"container": "yes", "playable": "yes", "type": "album", "name": "Cantatas Vol. 1",
@@ -55,6 +71,10 @@ LIBRARY: dict[str, list[dict[str, Any]]] = {
                                     ("Blue in Green", 337000)], 1)
     ],
 }
+
+
+class _SystemError(Exception):
+    """Answer eid 12, like the real NAS does for search."""
 
 
 @dataclass
@@ -90,6 +110,7 @@ class FakeHeosServer:
         self.under_process_for: set[str] = {"browse/browse"}
         self.fail_next: dict[str, int] = {}  # command -> eid
         self.silent: set[str] = set()  # commands that never get an answer
+        self.search_supported = True  # the real NAS answers eid 12 to every search
         self._writers: dict[asyncio.StreamWriter, bool] = {}  # writer -> registered for events
         self._server: asyncio.base_events.Server | None = None
 
@@ -169,14 +190,23 @@ class FakeHeosServer:
         except ValueError:
             self._reply(writer, command, "fail", f"eid=9&text=Out of range&{query}")
             return
-        message, payload = result if isinstance(result, tuple) else (result, None)
-        self._reply(writer, command, "success", query if message is None else message, payload)
+        except _SystemError:
+            self._reply(writer, command, "fail", "eid=12&text=System error&syserrno=-9")
+            return
+        if isinstance(result, tuple) and len(result) == 3:
+            message, payload, options = result
+        else:
+            message, payload = result if isinstance(result, tuple) else (result, None)
+            options = None
+        self._reply(writer, command, "success", query if message is None else message, payload, options)
 
     def _reply(self, writer: asyncio.StreamWriter, command: str, result: str, message: str,
-               payload: Any = None) -> None:
+               payload: Any = None, options: Any = None) -> None:
         obj: dict[str, Any] = {"heos": {"command": command, "result": result, "message": message}}
         if payload is not None:
             obj["payload"] = payload
+        if options is not None:
+            obj["options"] = options
         self._send(writer, obj)
 
     def _player(self, params: dict[str, str]) -> FakePlayer:
@@ -404,8 +434,9 @@ class FakeHeosServer:
             {"name": "Favorites", "image_url": "", "type": "heos_service", "sid": 1028, "available": "true"},
         ]
 
-    def _cmd_browse__browse(self, p: dict[str, str], w: asyncio.StreamWriter) -> tuple[str, Any]:
+    def _cmd_browse__browse(self, p: dict[str, str], w: asyncio.StreamWriter) -> tuple[Any, ...]:
         sid = int(p["sid"])
+        options = None
         if sid == 1027:
             items = [{"name": pl.name, "image_url": "", "sid": pl.pid, "type": "heos_service"}
                      for pl in self.players.values()]
@@ -421,6 +452,10 @@ class FakeHeosServer:
             items = [{k: v for k, v in it.items() if k != "duration"} for it in LIBRARY[cid]]
             for it in items:
                 it.setdefault("image_url", "")
+                if it.get("type") == "song":
+                    it.setdefault("album_id", cid)
+            if any(it.get("type") == "song" for it in items):
+                options = [{"browse": [{"id": 21, "name": "Playable Container"}]}]
         else:
             raise KeyError(sid)
         total = len(items)
@@ -430,7 +465,33 @@ class FakeHeosServer:
             start, end = int(a), int(b)
         page = items[start:end + 1]
         msg = f"sid={sid}" + (f"&cid={encode_value(p['cid'])}" if "cid" in p else "")
-        return f"{msg}&returned={len(page)}&count={total}", self._enc(page)
+        message = f"{msg}&returned={len(page)}&count={total}"
+        return (message, self._enc(page), options) if options else (message, self._enc(page))
+
+    def _cmd_browse__get_search_criteria(self, p: dict[str, str], w: asyncio.StreamWriter) -> tuple[str, Any]:
+        if int(p["sid"]) != DLNA_SID:
+            raise KeyError(p["sid"])
+        return f"sid={DLNA_SID}", [
+            {"name": "Artist", "scid": 1, "wildcard": "no"},
+            {"name": "Album", "scid": 2, "wildcard": "no"},
+            {"name": "Track", "scid": 3, "wildcard": "no", "cid": "SEARCHED_TRACKS-", "playable": "yes"},
+        ]
+
+    def _cmd_browse__search(self, p: dict[str, str], w: asyncio.StreamWriter) -> tuple[str, Any]:
+        if int(p["sid"]) != DLNA_SID:
+            raise KeyError(p["sid"])
+        if not self.search_supported:
+            raise _SystemError
+        needle, scid = p["search"].casefold(), int(p.get("scid", 3))
+        field = {1: "artist", 2: "album", 3: "name"}[scid]
+        songs = [it for items in LIBRARY.values() for it in items if it.get("type") == "song"]
+        hits = [{k: v for k, v in it.items() if k != "duration"} for it in songs if needle in it[field].casefold()]
+        start, end = 0, len(hits) - 1
+        if "range" in p:
+            a, b = p["range"].split(",")
+            start, end = int(a), int(b)
+        page = hits[start:end + 1]
+        return f"sid={DLNA_SID}&search={encode_value(p['search'])}&scid={scid}&returned={len(page)}&count={len(hits)}", self._enc(page)
 
     def _cmd_browse__play_input(self, p: dict[str, str], w: asyncio.StreamWriter) -> str:
         pl = self._player(p)

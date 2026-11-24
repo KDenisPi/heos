@@ -61,10 +61,20 @@ class DeviceConfig(BaseModel):
         return self.ip_override or self.ip
 
 
+class PathStep(BaseModel):
+    """One breadcrumb step: a container id and its display name."""
+
+    cid: str
+    name: str
+
+
 class FolderShortcut(BaseModel):
+    """A pinned folder (F5.7). ``path`` is the breadcrumb from the server root."""
+
     name: str
     sid: int
     cid: str
+    path: list[PathStep] = Field(default_factory=list)
 
 
 CONFIG_VERSION = 2
@@ -98,7 +108,8 @@ class State(BaseModel):
     version: int = 1
     last_pid: int | None = None
     last_host: str | None = None
-    last_folder: dict[str, str] = Field(default_factory=dict)  # sid -> cid
+    # sid -> breadcrumb of the last folder browsed on that server (F5.7)
+    last_folder: dict[str, list[PathStep]] = Field(default_factory=dict)
 
 
 M = TypeVar("M", bound=BaseModel)

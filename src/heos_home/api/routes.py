@@ -5,7 +5,7 @@ from __future__ import annotations
 import hmac
 from typing import Any, Literal
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_validator
 
@@ -104,6 +104,21 @@ class DevicePatch(BaseModel):
     ip_override: str | None = None
     power: dict[str, Any] | None = None
     default: bool | None = None
+
+
+class PathStepBody(BaseModel):
+    cid: str
+    name: str
+
+
+class ShortcutBody(BaseModel):
+    sid: int
+    path: list[PathStepBody] = Field(min_length=1, description="Breadcrumb from the server root to the folder")
+    name: str | None = None
+
+
+class LastFolderBody(BaseModel):
+    path: list[PathStepBody]
 
 
 class PowerBody(BaseModel):
@@ -307,3 +322,73 @@ async def image(key: str, svc: Services = Depends(services)) -> FileResponse:
         media_type=svc.images.media_type(key),
         headers={"Cache-Control": "public, max-age=604800"},
     )
+
+
+# ------------------------------------------------------------------ library
+@router.get("/library/servers", tags=["library"])
+async def library_servers(svc: Services = Depends(services)) -> dict[str, Any]:
+    """DLNA / UPnP media servers the HEOS device sees (F5.1)."""
+    return {"servers": await svc.library.servers()}
+
+
+@router.get("/sources/{sid}/browse", tags=["library"])
+async def browse(
+    sid: int,
+    cid: str | None = None,
+    start: int = Query(0, ge=0),
+    count: int = Query(50, ge=1, le=100),
+    refresh: bool = False,
+    svc: Services = Depends(services),
+) -> dict[str, Any]:
+    """One page of a source or container (F5.2). Cached for 10 minutes (F5.5).
+
+    ``playable`` tells whether the container itself can be queued as a whole.
+    """
+    return await svc.library.browse(sid, cid, start, count, refresh=refresh)
+
+
+@router.get("/sources/{sid}/search-criteria", tags=["library"])
+async def search_criteria(sid: int, svc: Services = Depends(services)) -> dict[str, Any]:
+    return {"criteria": await svc.library.search_criteria(sid)}
+
+
+@router.get("/sources/{sid}/search", tags=["library"])
+async def search(
+    sid: int,
+    q: str = Query(min_length=1),
+    criteria: int = Query(3, description="Search criteria id (scid), see /search-criteria"),
+    start: int = Query(0, ge=0),
+    count: int = Query(50, ge=1, le=100),
+    svc: Services = Depends(services),
+) -> dict[str, Any]:
+    """Search a source (F5.4). 501 when the server does not support search."""
+    return await svc.library.search(sid, q, criteria, start, count)
+
+
+@router.get("/library/shortcuts", tags=["library"])
+async def shortcuts(svc: Services = Depends(services)) -> dict[str, Any]:
+    """Pinned folders (F5.7)."""
+    return {"shortcuts": svc.library.shortcuts()}
+
+
+@router.post("/library/shortcuts", tags=["library"], dependencies=write)
+async def add_shortcut(body: ShortcutBody, svc: Services = Depends(services)) -> dict[str, Any]:
+    return svc.library.add_shortcut(body.sid, [p.model_dump() for p in body.path], body.name)
+
+
+@router.delete("/library/shortcuts/{shortcut_id}", tags=["library"], dependencies=write)
+async def remove_shortcut(shortcut_id: int, svc: Services = Depends(services)) -> dict[str, Any]:
+    svc.library.remove_shortcut(shortcut_id)
+    return {"removed": shortcut_id}
+
+
+@router.get("/library/last-folder/{sid}", tags=["library"])
+async def get_last_folder(sid: int, svc: Services = Depends(services)) -> dict[str, Any]:
+    """Breadcrumb of the folder last browsed on this server, to reopen it (F5.7)."""
+    return {"sid": sid, "path": svc.library.last_folder(sid)}
+
+
+@router.put("/library/last-folder/{sid}", tags=["library"], dependencies=write)
+async def set_last_folder(sid: int, body: LastFolderBody, svc: Services = Depends(services)) -> dict[str, Any]:
+    svc.library.set_last_folder(sid, [p.model_dump() for p in body.path])
+    return {"sid": sid, "path": svc.library.last_folder(sid)}
