@@ -55,7 +55,7 @@ Run against the fake HEOS device (no amp needed):
 ```bash
 .venv/bin/python -m heos_home.heos.fake --port 21255 &
 HEOS_HOME_DATA_DIR=./data HEOS_HOME_HOSTS=127.0.0.1 HEOS_HOME_HEOS_PORT=21255 \
-HEOS_HOME_DISCOVERY=off HEOS_HOME_LOG_JSON=off .venv/bin/heos-home
+HEOS_HOME_DISCOVERY=off .venv/bin/heos-home
 # API docs: http://localhost:8080/docs
 ```
 
@@ -63,7 +63,7 @@ Run against the real amp:
 
 ```bash
 HEOS_HOME_DATA_DIR=./data HEOS_HOME_HOSTS=192.168.1.50 HEOS_HOME_LOG_LEVEL=DEBUG \
-HEOS_HOME_LOG_JSON=off .venv/bin/heos-home
+.venv/bin/heos-home
 ```
 
 `DEBUG` logs every raw CLI line (`heos_home.wire`), which is useful for the
@@ -164,6 +164,16 @@ sudo sh -c 'umask 077; /opt/heos-home/.venv/bin/python -c "from cryptography.fer
 sudo chown heos-home:heos-home /etc/heos-home/key
 sudo cp deploy/heos-home.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now heos-home
+```
+
+Logs: plain text (`time level logger: message`) to the journal and to
+`/var/log/heos-home/heos-home.log`. The file is rotated once a day
+(`heos-home.log.2026-11-25`, ...) and 7 days are kept. Change it with
+`HEOS_HOME_LOG_FILE` / `HEOS_HOME_LOG_BACKUP_COUNT` in `/etc/heos-home/env`;
+`HEOS_HOME_LOG_JSON=on` writes JSON lines instead.
+
+```bash
+tail -f /var/log/heos-home/heos-home.log     # or: journalctl -u heos-home -f
 ```
 
 ## Layout

@@ -6,6 +6,7 @@ import json
 import logging
 import sys
 from datetime import datetime, timezone
+from logging.handlers import TimedRotatingFileHandler
 
 import uvicorn
 
@@ -26,14 +27,28 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(entry, ensure_ascii=False)
 
 
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+
+
 def setup_logging(settings: Settings) -> None:
-    handler = logging.StreamHandler(sys.stdout)
-    if settings.log_json:
-        handler.setFormatter(JsonFormatter())
-    else:
-        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s"))
+    """Console always; with HEOS_HOME_LOG_FILE also a file rotated daily, kept log_backup_count days."""
+    formatter: logging.Formatter = JsonFormatter() if settings.log_json else logging.Formatter(LOG_FORMAT)
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    if settings.log_file:
+        settings.log_file.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(
+            TimedRotatingFileHandler(
+                settings.log_file, when="D", interval=1, backupCount=settings.log_backup_count, encoding="utf-8"
+            )
+        )
+    for handler in handlers:
+        handler.setFormatter(formatter)
     root = logging.getLogger()
-    root.handlers[:] = [handler]
+    for old in root.handlers[:]:
+        root.removeHandler(old)
+        old.close()
+    for handler in handlers:
+        root.addHandler(handler)
     root.setLevel(settings.log_level)
     # The power poll makes an HTTP request every 30 s; keep httpx quiet unless debugging.
     for name in ("httpx", "httpcore"):

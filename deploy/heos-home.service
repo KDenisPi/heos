@@ -8,12 +8,16 @@ Type=simple
 User=heos-home
 Group=heos-home
 WorkingDirectory=/opt/heos-home
+# Log file rotated daily, 7 days kept (HEOS_HOME_LOG_BACKUP_COUNT); the env file can override.
+Environment=HEOS_HOME_LOG_FILE=/var/log/heos-home/heos-home.log
 EnvironmentFile=-/etc/heos-home/env
 ExecStart=/opt/heos-home/.venv/bin/heos-home
 Restart=always
 RestartSec=2
 StateDirectory=heos-home
 StateDirectoryMode=0750
+LogsDirectory=heos-home
+LogsDirectoryMode=0750
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true

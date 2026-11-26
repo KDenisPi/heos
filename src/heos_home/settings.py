@@ -10,7 +10,9 @@
 | HEOS_HOME_TOKEN          | (empty)              | If set, write requests need this bearer token |
 | HEOS_HOME_STATIC_DIR     | web/dist if built    | Built PWA to serve at /                       |
 | HEOS_HOME_LOG_LEVEL      | INFO                 | DEBUG also logs raw CLI traffic               |
-| HEOS_HOME_LOG_JSON       | on                   | Structured JSON logs (off = plain text)       |
+| HEOS_HOME_LOG_JSON       | off                  | JSON lines instead of plain text              |
+| HEOS_HOME_LOG_FILE       | (empty)              | Also log to this file, rotated daily          |
+| HEOS_HOME_LOG_BACKUP_COUNT | 7                  | Rotated log files kept (days)                 |
 | HEOS_HOME_HEOS_PORT      | 1255                 | HEOS CLI port (change only for the fake)      |
 | HEOS_HOME_KEY_FILE       | /etc/heos-home/key   | Key for saved HEOS credentials (mode 600)     |
 """
@@ -43,7 +45,9 @@ class Settings:
     token: str | None = None
     static_dir: Path | None = None
     log_level: str = "INFO"
-    log_json: bool = True
+    log_json: bool = False
+    log_file: Path | None = None
+    log_backup_count: int = 7
     heos_port: int = 1255
     key_file: Path = Path("/etc/heos-home/key")
 
@@ -60,7 +64,9 @@ class Settings:
             token=env.get("HEOS_HOME_TOKEN") or None,
             static_dir=Path(static) if static else (_REPO_WEB_DIST if _REPO_WEB_DIST.is_dir() else None),
             log_level=(env.get("HEOS_HOME_LOG_LEVEL") or "INFO").upper(),
-            log_json=_flag(env.get("HEOS_HOME_LOG_JSON"), True),
+            log_json=_flag(env.get("HEOS_HOME_LOG_JSON"), False),
+            log_file=Path(env["HEOS_HOME_LOG_FILE"]) if env.get("HEOS_HOME_LOG_FILE") else None,
+            log_backup_count=int(env.get("HEOS_HOME_LOG_BACKUP_COUNT") or 7),
             heos_port=int(env.get("HEOS_HOME_HEOS_PORT") or 1255),
             key_file=Path(env.get("HEOS_HOME_KEY_FILE") or "/etc/heos-home/key"),
         )

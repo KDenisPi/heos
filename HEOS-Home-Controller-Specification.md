@@ -348,7 +348,7 @@ Power is always per device: there is no app-wide power button, since each HEOS d
 | Startup | Service ready < 10 s after boot; systemd unit with `Restart=always` |
 | Security | LAN only, bound to the home subnet; optional shared PIN / token for write actions; HEOS credentials encrypted at rest (key from `/etc/heos-home/key`, mode 600); no telemetry |
 | Footprint | Runs on a Pi 4: < 150 MB RAM, < 5 % CPU idle |
-| Logging | Structured JSON logs; raw CLI traffic at DEBUG level for protocol work |
+| Logging | Plain-text lines (`time level logger: message`, JSON optional) to the console and to `/var/log/heos-home/heos-home.log`, rotated daily, 7 days kept; raw CLI traffic at DEBUG level for protocol work |
 | Backup | Nightly copy of `/var/lib/heos-home` (config + playlists) to a dated archive, keep 14 |
 | Deployment | Docker Compose (`heos-home` container, host networking for SSDP) or plain venv + systemd |
 | Testing | Fake HEOS CLI server (asyncio, replays recorded JSON) for unit/integration tests; Playwright smoke tests for the UI |
