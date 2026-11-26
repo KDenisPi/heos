@@ -334,7 +334,7 @@ Power is always per device: there is no app-wide power button, since each HEOS d
 **Interaction rules**
 
 - Optimistic UI: update the slider or state immediately, then reconcile with the WebSocket event
-- Volume slider: send at most every 150 ms while dragging (throttle), always send the final value
+- Volume slider: send at most every 150 ms while dragging (throttle), always send the final value. On phones a touch on the bar does nothing; only dragging the handle (or − / +) changes the volume, so a near-miss on the bottom navigation or a swipe cannot make it jump
 - Offline banner when the WebSocket drops; reconnect automatically with backoff
 - PWA: installable, full-screen, screen-wake lock option for wall-mounted use
 
