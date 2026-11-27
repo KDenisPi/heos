@@ -9,3 +9,4 @@ dist/
 web/dist/
 web/dev-dist/
 *.tsbuildinfo
+/build/

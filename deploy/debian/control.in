@@ -1,0 +1,16 @@
+Package: heos-home
+Version: @VERSION@
+Architecture: all
+Maintainer: @MAINTAINER@
+Installed-Size: @SIZE@
+Section: sound
+Priority: optional
+Depends: python3 (>= 3.11), python3-venv, python3-fastapi (>= 0.115), python3-starlette (>= 0.46), python3-pydantic (>= 2.10), python3-uvicorn (>= 0.32), python3-websockets (>= 15), python3-httpx (>= 0.28), python3-cryptography (>= 43), adduser, systemd
+Homepage: https://github.com/KDenisPi/heos
+Description: HEOS Home Controller - local controller for HEOS amplifiers
+ A local-only service and web app (PWA) for a Denon / Marantz HEOS device
+ such as the Marantz PM7000N: playback, queue, DLNA and Amazon Music sources,
+ HEOS Favorites, local playlists, inputs and power.
+ .
+ The Python environment is not part of the package: after the first install
+ run /opt/heos-home/setup-env.sh once.

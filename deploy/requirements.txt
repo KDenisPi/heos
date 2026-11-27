@@ -1,0 +1,11 @@
+# Python packages HEOS Home Controller needs at run time (lowest tested versions).
+# On Raspberry Pi OS / Debian 13 (trixie) these all come ready-made from apt
+# (python3-fastapi, ...; dependencies of the .deb), so setup-env.sh installs
+# nothing from the internet there. Keep in sync with pyproject.toml and
+# deploy/debian/control.in.
+fastapi>=0.115
+pydantic>=2.10
+uvicorn>=0.32
+websockets>=15
+httpx>=0.28
+cryptography>=43

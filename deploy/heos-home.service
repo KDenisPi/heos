@@ -11,7 +11,10 @@ WorkingDirectory=/opt/heos-home
 # Log file rotated daily, 7 days kept (HEOS_HOME_LOG_BACKUP_COUNT); the env file can override.
 Environment=HEOS_HOME_LOG_FILE=/var/log/heos-home/heos-home.log
 EnvironmentFile=-/etc/heos-home/env
-ExecStart=/opt/heos-home/.venv/bin/heos-home
+# The environment comes from /opt/heos-home/setup-env.sh; the code is not installed into it.
+Environment=PYTHONPATH=/opt/heos-home/src
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/heos-home/.venv/bin/python -m heos_home
 Restart=always
 RestartSec=2
 StateDirectory=heos-home
@@ -22,7 +25,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/heos-home
+ReadWritePaths=/var/lib/heos-home /var/log/heos-home
 
 [Install]
 WantedBy=multi-user.target

@@ -30,7 +30,7 @@ This is a local-only controller for the HEOS devices at home. It replaces the un
 
 The system is a local service on the home network with a web client (PWA). All logic and state live in the service; the clients only display and send commands.
 
-- **Service:** `heos-home` on the Raspberry Pi 4. It owns the single HEOS CLI connection, receives all change events, runs discovery and power control, and stores settings in JSON files and playlists as M3U8 files (section 5).
+- **Service:** `heos-home` on a Raspberry Pi (Pi 3 Model B in production). It owns the single HEOS CLI connection, receives all change events, runs discovery and power control, and stores settings in JSON files and playlists as M3U8 files (section 5).
 - **Clients:** the Samsung tablet and the phone run the same PWA in the browser, installed to the home screen. They hold no state and talk only to the service, over REST + WebSocket.
 - **Integrations:** the same API can later feed MCP, MQTT or Home Assistant.
 - **Availability:** the service runs under systemd with `Restart=always` on the always-on Pi; clients show an offline banner and reconnect when it comes back.
@@ -40,7 +40,7 @@ Components, ports and data flow are in section 3.
 
 ## 3. System architecture
 
-One Python service on the Pi 4 holds the only HEOS connection, stores all state, and serves the web UI. Clients only talk to that service.
+One Python service on the Pi holds the only HEOS connection, stores all state, and serves the web UI. Clients only talk to that service.
 
 ![System architecture](heos-architecture.png)
 
@@ -52,7 +52,7 @@ flowchart TB
     T["Samsung Tab · PWA<br/>primary, 1920 x 1200"]
     P["Android phone · PWA<br/>phase 2"]
   end
-  subgraph S["heos-home service · Raspberry Pi 4 · Python asyncio"]
+  subgraph S["heos-home service · Raspberry Pi · Python asyncio"]
     API["API layer<br/>FastAPI: REST /api/v1, WebSocket /ws,<br/>serves the PWA; SSDP discovery"]
     PL["Player service<br/>queue, sort, inputs<br/>volume, now playing"]
     CLI["HEOS CLI client<br/>1 socket :1255<br/>heartbeat, events"]
@@ -347,7 +347,7 @@ Power is always per device: there is no app-wide power button, since each HEOS d
 | Concurrency | One CLI connection owned by the server; HEOS commands serialized per connection (responses are matched by command name; "command under process" handled) |
 | Startup | Service ready < 10 s after boot; systemd unit with `Restart=always` |
 | Security | LAN only, bound to the home subnet; optional shared PIN / token for write actions; HEOS credentials encrypted at rest (key from `/etc/heos-home/key`, mode 600); no telemetry |
-| Footprint | Runs on a Pi 4: < 150 MB RAM, < 5 % CPU idle |
+| Footprint | Runs on a Pi 3 Model B: < 150 MB RAM, < 5 % CPU idle |
 | Logging | Plain-text lines (`time level logger: message`, JSON optional) to the console and to `/var/log/heos-home/heos-home.log`, rotated daily, 7 days kept; raw CLI traffic at DEBUG level for protocol work |
 | Backup | Nightly copy of `/var/lib/heos-home` (config + playlists) to a dated archive, keep 14 |
 | Deployment | Docker Compose (`heos-home` container, host networking for SSDP) or plain venv + systemd |
@@ -357,7 +357,7 @@ Power is always per device: there is no app-wide power button, since each HEOS d
 
 - Backend: Python 3.12, asyncio, FastAPI + uvicorn, `pyheos` or a custom CLI client (section 5 of HEOS.md), `async-upnp-client` for SSDP; storage = JSON + M3U8 files on disk (no database)
 - Frontend: TypeScript, React or Svelte, Material 3 components (MUI or Material Web), Vite, `vite-plugin-pwa`
-- Host: Raspberry Pi 4 (always on, wired Ethernet). The GB10 is reserved for AI workloads; it can later host an MCP bridge to the same API.
+- Host: Raspberry Pi 3 Model B, Raspbian 13 (trixie), 32-bit (a Pi 4 if it ever falls short); always on. Installed as a Debian package (`heos-home_<version>_all.deb`) without a Python environment inside: the Python libraries are Debian's `python3-*` packages (package dependencies; lowest tested versions in `deploy/requirements.txt`) and `/opt/heos-home/setup-env.sh` creates the environment once. The GB10 is reserved for AI workloads; it can later host an MCP bridge to the same API.
 
 ## 9. Risks, open questions, roadmap
 

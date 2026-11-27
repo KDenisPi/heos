@@ -8,11 +8,13 @@ version = "0.1.0"
 description = "Local-only controller for HEOS devices (Marantz PM7000N and friends)"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.110",
-    "uvicorn>=0.29",
-    "websockets>=12",
-    "httpx>=0.27",
-    "cryptography>=42",
+    # Lowest tested versions = Debian 13 (trixie); see deploy/requirements.txt.
+    "fastapi>=0.115",
+    "pydantic>=2.10",
+    "uvicorn>=0.32",
+    "websockets>=15",
+    "httpx>=0.28",
+    "cryptography>=43",
 ]
 
 [project.optional-dependencies]

@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    remove)
+        # The environment is made by setup-env.sh, not by the package.
+        rm -rf /opt/heos-home/.venv
+        rmdir /opt/heos-home 2>/dev/null || true
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        ;;
+    purge)
+        rm -rf /opt/heos-home/.venv /var/log/heos-home
+        # The saved password cannot be read without the key, so both go.
+        rm -f /var/lib/heos-home/secrets.json
+        rm -rf /etc/heos-home
+        rmdir /opt/heos-home 2>/dev/null || true
+        echo "heos-home: playlists and settings are kept in /var/lib/heos-home; delete it by hand if not needed."
+        ;;
+esac
+exit 0

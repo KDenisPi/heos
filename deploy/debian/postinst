@@ -1,0 +1,33 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ]; then
+    if ! getent passwd heos-home >/dev/null; then
+        adduser --system --group --home /var/lib/heos-home --no-create-home \
+            --gecos "HEOS Home Controller" heos-home >/dev/null
+    fi
+    install -d -m 0750 -o heos-home -g heos-home /var/lib/heos-home /var/log/heos-home
+    chmod 0640 /etc/heos-home/env
+
+    # Key for the saved HEOS password (F7.2); kept across upgrades.
+    if [ ! -s /etc/heos-home/key ]; then
+        (umask 077; python3 -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())' \
+            > /etc/heos-home/key)
+        chown heos-home:heos-home /etc/heos-home/key
+    fi
+
+    # /opt is read-only for the service, so compile the code here.
+    python3 -m compileall -q /opt/heos-home/src >/dev/null 2>&1 || true
+
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    systemctl enable heos-home.service >/dev/null 2>&1 || true
+    if [ -x /opt/heos-home/.venv/bin/python ]; then
+        systemctl restart heos-home.service || true
+    else
+        echo
+        echo "heos-home: create the Python environment once, then the service starts:"
+        echo "    sudo /opt/heos-home/setup-env.sh"
+        echo
+    fi
+fi
+exit 0

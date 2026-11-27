@@ -150,21 +150,46 @@ a rejected password stops the retries until you sign in by hand. Signing out
 in this app forgets the saved password. Amazon logins are never handled here:
 they live in the HEOS account.
 
-## Deployment (Pi 4, venv + systemd)
+## Deployment (Debian package)
+
+Tested target: Raspberry Pi 3 Model B, Raspbian 13 (trixie), 32-bit. The
+package is architecture-independent (`_all.deb`): it holds our code, the built
+web app, the systemd unit and the install scripts, but no Python environment.
+The Python libraries come from Debian (`python3-fastapi`, ... are package
+dependencies, so `apt` installs them), and `setup-env.sh` creates the
+environment once.
+
+Build (on the PC; needs Node for the web app):
 
 ```bash
-sudo useradd --system --home /opt/heos-home heos-home
-sudo mkdir -p /opt/heos-home /etc/heos-home
-sudo cp -r . /opt/heos-home && cd /opt/heos-home
-sudo python3 -m venv .venv && sudo .venv/bin/pip install .
-sudo install -m 600 deploy/env.example /etc/heos-home/env    # edit it
-# Key for the saved HEOS password (F7.2). /etc is read-only for the service
-# (ProtectSystem=strict), so create it here, readable only by the service user:
-sudo sh -c 'umask 077; /opt/heos-home/.venv/bin/python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > /etc/heos-home/key'
-sudo chown heos-home:heos-home /etc/heos-home/key
-sudo cp deploy/heos-home.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now heos-home
+deploy/build-deb.sh               # -> build/heos-home_0.1.0_all.deb
+deploy/build-deb.sh --skip-web    # reuse the existing web/dist
 ```
+
+Install on the Pi:
+
+```bash
+sudo apt install ./heos-home_0.1.0_all.deb   # user, folders, key, service
+sudo /opt/heos-home/setup-env.sh             # once: Python environment, starts the service
+```
+
+| What | Where |
+| ---- | ----- |
+| Code, web app, `requirements.txt`, `setup-env.sh` | `/opt/heos-home` |
+| Python environment (made by `setup-env.sh`) | `/opt/heos-home/.venv` |
+| Settings (kept across upgrades) | `/etc/heos-home/env` |
+| Key for the saved HEOS password (made on first install) | `/etc/heos-home/key` |
+| Playlists, settings, cache | `/var/lib/heos-home` |
+| Logs | `/var/log/heos-home` |
+
+Update: install the newer `.deb` the same way; the service restarts and data,
+settings and the key stay. Run `setup-env.sh` again only when
+`requirements.txt` changed. `sudo apt remove heos-home` removes the program;
+`purge` also removes `/etc/heos-home`, the logs and the saved password, but
+keeps playlists in `/var/lib/heos-home`.
+
+Backup: `/var/lib/heos-home` and `/etc/heos-home/key`, kept apart (together
+they unlock the saved HEOS password).
 
 Logs: plain text (`time level logger: message`) to the journal and to
 `/var/log/heos-home/heos-home.log`. The file is rotated once a day
