@@ -17,6 +17,14 @@ PKG=$OUT/heos-home_${VERSION}_all
 MAINTAINER="$(git config user.name) <$(git config user.email)>"
 
 if [ "${1:-}" != "--skip-web" ]; then
+    # Node is often unpacked under ~/.local/node instead of being on PATH.
+    if ! command -v npm >/dev/null && [ -x "$HOME/.local/node/bin/npm" ]; then
+        export PATH="$HOME/.local/node/bin:$PATH"
+    fi
+    if ! command -v npm >/dev/null; then
+        echo "npm not found: put Node on PATH, or run with --skip-web to use the existing web/dist" >&2
+        exit 1
+    fi
     (cd web && npm ci --no-audit --no-fund && npm run build)
 fi
 [ -f web/dist/index.html ] || { echo "web/dist is missing; build the web app first" >&2; exit 1; }
