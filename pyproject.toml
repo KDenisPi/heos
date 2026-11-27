@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "heos-home"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local-only controller for HEOS devices (Marantz PM7000N and friends)"
 requires-python = ">=3.11"
 dependencies = [

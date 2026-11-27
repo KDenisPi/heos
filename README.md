@@ -162,14 +162,14 @@ environment once.
 Build (on the PC; needs Node for the web app):
 
 ```bash
-deploy/build-deb.sh               # -> build/heos-home_0.1.0_all.deb
+deploy/build-deb.sh               # -> build/heos-home_0.1.1_all.deb
 deploy/build-deb.sh --skip-web    # reuse the existing web/dist
 ```
 
 Install on the Pi:
 
 ```bash
-sudo apt install ./heos-home_0.1.0_all.deb   # user, folders, key, service
+sudo apt install ./heos-home_0.1.1_all.deb   # user, folders, key, service
 sudo /opt/heos-home/setup-env.sh             # once: Python environment, starts the service
 ```
 

@@ -6,7 +6,10 @@ if [ "$1" = "configure" ]; then
         adduser --system --group --home /var/lib/heos-home --no-create-home \
             --gecos "HEOS Home Controller" heos-home >/dev/null
     fi
-    install -d -m 0750 -o heos-home -g heos-home /var/lib/heos-home /var/log/heos-home
+    install -d -m 0750 -o heos-home -g heos-home /var/lib/heos-home
+    # Logs hold no secrets (the password is never logged): readable by every user.
+    install -d -m 0755 -o heos-home -g heos-home /var/log/heos-home
+    chmod 0755 /var/log/heos-home
     chmod 0640 /etc/heos-home/env
 
     # Key for the saved HEOS password (F7.2); kept across upgrades.

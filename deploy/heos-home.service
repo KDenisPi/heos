@@ -20,7 +20,9 @@ RestartSec=2
 StateDirectory=heos-home
 StateDirectoryMode=0750
 LogsDirectory=heos-home
-LogsDirectoryMode=0750
+LogsDirectoryMode=0755
+# Log files 0644 (systemd default, stated here on purpose); data files keep their own modes (secrets.json 600).
+UMask=0022
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
